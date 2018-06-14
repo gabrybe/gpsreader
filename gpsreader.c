@@ -60,5 +60,5 @@ int fileExists(const char *filename) {
 
 // Parsing del file GPX
 int parseGpx(const char *filename) {
-
+  printf("Parsing GPX file");
 }
