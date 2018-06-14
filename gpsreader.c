@@ -31,7 +31,7 @@ int fileExists(const char *filename);
 int parseGpx(const char *filename);
 
 // main
-void main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
   char *fn = argv[1];
 
@@ -40,13 +40,23 @@ void main(int argc, char *argv[]) {
   // validazione argomenti
   if (argc < 2 || !fileExists(fn)) {
     printf("Uso:\n\tgpsreader [file]\n\n\t[file]\n\tpercorso completo del file GPX da esaminare.\n");
-    exit(-1);
+    return 1;
   }
 
    // Initialize libxml
-    xmlInitParser();
+   xmlInitParser();
 
-  // validazione file XML
+  // parsing file XML
+  xmlDocPtr xmlDoc = xmlParseFile(argv[1]);
+  
+
+
+  // free
+  xmlCleanupParser();
+  
+
+  // uscita senza errori
+  return 0;
 }
 
 
