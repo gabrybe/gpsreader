@@ -30,19 +30,27 @@
 // namespace che identifica i GPX
 #define GPX_NAMESPACE_STR "http://www.topografix.com/GPX/1/1"
 
-// tipi
+// tipi custom: Risultati finali
 typedef struct {
   double distance;
-  double elevation;
+  double ascent;
   double maxspeed;
   double avgspeed;
 } metrics;
+
+// tipi custom: Rappresentazione di un punto GPX
+typedef struct {
+  double lat;
+  double lon;
+  double elevation;
+} gpxPoint;
 
 
 // prototipi delle funzioni
 int fileExists(const char *filename);
 void printNode(const xmlNodePtr n);
 void printResults(const char *filename, const metrics *r);
+gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
 xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node);
 xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx);
 xmlXPathObjectPtr getPoints(const xmlXPathContextPtr ctx);
@@ -61,17 +69,14 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // contenitore in output
+  // contenitore risultati in output
   metrics result;
 
-   // Initialize libxml
-   xmlInitParser();
+  // Inizializzazione parser libxml
+  xmlInitParser();
 
   // parsing file XML
   xmlDocPtr xmlDoc = xmlParseFile(filename);
-
-  // free
-  xmlCleanupParser();
 
   // Creazione di un "contesto" nell'ambito del documento XML nel quale sarà valutata una certa espressione XPath
   // Questo specifico contesto racchiude tutto il documento (verrà usato infatti per cercare le tracce)
@@ -93,7 +98,7 @@ int main(int argc, char *argv[]) {
   xmlNodeSetPtr trackNodes = tracks->nodesetval;
 
   for (int n = 0; n < tracks->nodesetval->nodeNr; n++) {
-    printf("Nodo %d\n", n);
+    printf("Traccia %d\n", n);
     xmlNodePtr node = tracks->nodesetval->nodeTab[n];
 
     // Se non è un nodo XML (XML_ELEMENT_NODE è un elemento dell'enum xmlElementType), si passa al prossimo
@@ -106,24 +111,43 @@ int main(int argc, char *argv[]) {
     // recupero dei punti della traccia
     xmlXPathObjectPtr points = getPoints(trackContext);
 
+    // variabili di comodo
+    gpxPoint currPoint;
+    gpxPoint prevPoint;
+
     for (int p = 0; p < points->nodesetval->nodeNr; p++) {
-      printf("\tPunto %d\n", p);
+      //printf("\tPunto %d\n", p);
 
       // aggiorno i risultati calcolando
       // * la distanza del punto dal precedente
       // * il dislivello
       // * la velocità media e massima
+      xmlNodePtr pointNode = points->nodesetval->nodeTab[p];
+      //printNode(pointNode);
+
+      currPoint = getPointData(xmlDoc, pointNode);
+
+      printf("Punto %d\tquota: %.2lf\n", p, currPoint.elevation);
+
+
+      if (p == 0) {
+        prevPoint = currPoint;
+      }
+
+      // aggiornamento delle statistiche
+      // updateMetrics(*metrics, currPoint, prevPoint);
 
     }
-
-
-
 
     printNode(node);
   }
 
   // stampa dei risultati
   printResults(filename, &result);
+
+  // free
+  xmlFreeDoc(xmlDoc);
+  xmlCleanupParser();
 
   // uscita senza errori
   return 0;
@@ -168,7 +192,18 @@ void printNode(const xmlNodePtr n) {
 void printResults(const char *filename, const metrics *r) {
   printf("Risultati elaborazione file %s\n\n", filename);
   printf("* Distanza:\t\t%.2lf\n", r->distance);
-  printf("* Dislivello in salita:\t%.2lf\n", r->elevation);
+  printf("* Dislivello in salita:\t%.2lf\n", r->ascent);
   printf("* Velocità media:\t%.2lf\n", r->avgspeed);
   printf("* Velocità massima:\t%.2lf\n", r->maxspeed);
+}
+
+gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode) {
+  gpxPoint gp;
+  char *end;
+  // Get the elevation
+  xmlXPathContextPtr eleContext = createXPathContext(doc, pointNode);
+  xmlXPathObjectPtr elevation = xmlXPathEvalExpression((xmlChar*)"gpx:ele/text()", eleContext);
+
+  gp.elevation = strtod(elevation->nodesetval->nodeTab[0]->content, &end);
+  return gp;
 }
