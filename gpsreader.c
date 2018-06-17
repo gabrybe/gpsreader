@@ -13,9 +13,13 @@
 // - lettura del file XML (in formato GPX, che è uno standard utilizzato da quasi tutti i dispositivi GPS in commercio)
 // contenente la traccia del percorso: tramite la libreria libxml2, http://www.xmlsoft.org/
 //
-// - Calcolo distanze tra ogni singolo punto (latitudine/longitudine) della traccia: applicando la formula dell'emisenoverso // (https://it.wikipedia.org/wiki/Formula_dell%27emisenoverso)
+// - Calcolo distanze tra ogni singolo punto (latitudine/longitudine) della traccia: applicando la formula dell'emisenoverso 
+// (https://it.wikipedia.org/wiki/Formula_dell%27emisenoverso)
 //
 // Uso: gpsreader [file]
+// Compilazione:
+// gcc gpsreader.c -o gpsreader.out -I/usr/include/libxml2 -lxml2 -lm
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +35,12 @@
 // namespace che identifica i GPX
 #define GPX_NAMESPACE_STR "http://www.topografix.com/GPX/1/1"
 
+// raggio terrestre (in Km) come implementato sui GPS
+#define EARTH_RADIUS 6378.13
+
+// fattore di conversione tra gradi e radianti (pi/180)
+#define GRAD_TO_RAD (3.1415926536 / 180)
+
 // tipi custom: Risultati finali
 typedef struct {
   double distance;
@@ -38,6 +48,7 @@ typedef struct {
   double descent;
   double maxspeed;
   double avgspeed;
+  double time; // non sarà un double
 } metrics;
 
 // tipi custom: Rappresentazione di un punto GPX
@@ -45,6 +56,7 @@ typedef struct {
   double lat;
   double lon;
   double elevation;
+  double time;
 } gpxPoint;
 
 
@@ -54,6 +66,7 @@ void printNode(const xmlNodePtr n);
 void printResults(const char *filename, const metrics *r);
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
 double getAscent(const gpxPoint *p1, const gpxPoint *p2);
+double getDistance(double lat1, double lon1, double lat2, double lon2);
 xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node);
 xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx);
 xmlXPathObjectPtr getPoints(const xmlXPathContextPtr ctx);
@@ -141,9 +154,10 @@ int main(int argc, char *argv[]) {
         result.descent += fabs(ascent);
       }
 
-      printf("Punto %d\tquota: %.2lf\t%.2f\n", p, currPoint.elevation, ascent);
+      printf("Punto %d\tquota: %.2lf\t%.2f\t%.2f\t%.2f\n", p, currPoint.elevation, currPoint.lat, currPoint.lon, ascent);
 
-
+      // distanza dal punto precedente
+      result.distance += fabs(getDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon)); 
 
       // aggiornamento delle statistiche
       // updateMetrics(*metrics, currPoint, prevPoint);
@@ -205,6 +219,7 @@ void printResults(const char *filename, const metrics *r) {
   printf("* Distanza (Km):\t\t%8.2lf\n", r->distance);
   printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
   printf("* Dislivello in discesa (m):\t%8.2lf\n", r->descent);
+  printf("* Tempo impiegato:\t%8.2lf\n", r->time);
   printf("* Velocità media (Km/h):\t%8.2lf\n", r->avgspeed);
   printf("* Velocità massima (Km/h):\t%8.2lf\n", r->maxspeed);
   printf("\n");
@@ -213,14 +228,47 @@ void printResults(const char *filename, const metrics *r) {
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode) {
   gpxPoint gp;
   char *end;
-  // Get the elevation
+  
+  // quota del punto: nel campo "ele"
   xmlXPathContextPtr eleContext = createXPathContext(doc, pointNode);
   xmlXPathObjectPtr elevation = xmlXPathEvalExpression((xmlChar*)"gpx:ele/text()", eleContext);
 
   gp.elevation = strtod(elevation->nodesetval->nodeTab[0]->content, &end);
+
+  // free
+  if (elevation) xmlXPathFreeObject(elevation);
+  xmlXPathFreeContext(eleContext);
+
+
+  // latitudine/longitudine: negli attributi "lat" e "lon" del trkpt
+  if (xmlHasProp(pointNode, (xmlChar*)"lat") && xmlHasProp(pointNode, (xmlChar*)"lon")) {
+    xmlChar *lat = xmlGetProp(pointNode, (xmlChar*)"lat");
+    gp.lat = strtod((char*)lat, &end);
+
+    xmlChar *lon = xmlGetProp(pointNode, (xmlChar*)"lon");
+    gp.lon = strtod((char*)lon, &end);
+  }
+
+
   return gp;
 }
 
+// dislivello tra due punti
 double getAscent(const gpxPoint *p1, const gpxPoint *p2) {
   return (p1->elevation - p2->elevation);
+}
+
+// distanza tra due punti, applicando la formula dell'emisenoverso
+double getDistance(double lat1, double lon1, double lat2, double lon2) {
+
+  double latRad = (lat2 - lat1) * GRAD_TO_RAD;
+  double lonRad = (lon2 - lon1) * GRAD_TO_RAD;
+
+  double lat1Rad = lat1 * GRAD_TO_RAD;
+  double lat2Rad = lat2 * GRAD_TO_RAD;
+
+  double a = pow(sin(latRad / 2), 2.0) + pow(sin(lonRad / 2), 2.0) * cos(lat1Rad) * cos(lat2Rad);
+  double c = 2 * asin(sqrt(a));
+
+  return EARTH_RADIUS * c;
 }
