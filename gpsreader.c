@@ -139,18 +139,21 @@ int main(int argc, char *argv[]) {
       // * il dislivello
       // * la velocità media e massima
       xmlNodePtr pointNode = points->nodesetval->nodeTab[p];
-      //printNode(pointNode);
-
+      
       currPoint = getPointData(xmlDoc, pointNode);
+
+      // se siamo al primo elemento, il punto "precedente" è il punto stesso
       if (p == 0) {
         prevPoint = currPoint;
       }
 
       // ascesa (o discesa)
       double ascent = getAscent(&currPoint, &prevPoint);
+      // dislivello positivo (salita)
       if (ascent > 0) {
         result.ascent += ascent;
       } else {
+        // dislivello negativo (discesa)
         result.descent += fabs(ascent);
       }
 
@@ -161,15 +164,20 @@ int main(int argc, char *argv[]) {
 
       // aggiornamento delle statistiche
       // updateMetrics(*metrics, currPoint, prevPoint);
+
+      // il punto appena elaborato diventa il "punto precedente"
       prevPoint = currPoint;
-    }
+    
+    } // for
 
     printNode(node);
+
+    // stampa dei risultati finali
+    printResults(filename, &result);
+
   }
 
-  // stampa dei risultati
-  printResults(filename, &result);
-
+  
   // free
   xmlFreeDoc(xmlDoc);
   xmlCleanupParser();
