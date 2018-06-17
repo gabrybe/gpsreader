@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
 
 // libxml2
 #include <libxml/parser.h>
@@ -34,6 +35,7 @@
 typedef struct {
   double distance;
   double ascent;
+  double descent;
   double maxspeed;
   double avgspeed;
 } metrics;
@@ -51,6 +53,7 @@ int fileExists(const char *filename);
 void printNode(const xmlNodePtr n);
 void printResults(const char *filename, const metrics *r);
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
+double getAscent(const gpxPoint *p1, const gpxPoint *p2);
 xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node);
 xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx);
 xmlXPathObjectPtr getPoints(const xmlXPathContextPtr ctx);
@@ -126,17 +129,25 @@ int main(int argc, char *argv[]) {
       //printNode(pointNode);
 
       currPoint = getPointData(xmlDoc, pointNode);
-
-      printf("Punto %d\tquota: %.2lf\n", p, currPoint.elevation);
-
-
       if (p == 0) {
         prevPoint = currPoint;
       }
 
+      // ascesa (o discesa)
+      double ascent = getAscent(&currPoint, &prevPoint);
+      if (ascent > 0) {
+        result.ascent += ascent;
+      } else {
+        result.descent += fabs(ascent);
+      }
+
+      printf("Punto %d\tquota: %.2lf\t%.2f\n", p, currPoint.elevation, ascent);
+
+
+
       // aggiornamento delle statistiche
       // updateMetrics(*metrics, currPoint, prevPoint);
-
+      prevPoint = currPoint;
     }
 
     printNode(node);
@@ -171,7 +182,7 @@ int fileExists(const char *filename) {
   return (fp!=NULL);
 }
 
-// recupero delle tracce/segmenti
+// recupero delle tracce/segmenti dal document
 xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx) {
   return xmlXPathEvalExpression((xmlChar*)"//gpx:trk/gpx:trkseg", ctx);  
 }
@@ -191,10 +202,12 @@ void printNode(const xmlNodePtr n) {
 // stampa risultati
 void printResults(const char *filename, const metrics *r) {
   printf("Risultati elaborazione file %s\n\n", filename);
-  printf("* Distanza:\t\t%.2lf\n", r->distance);
-  printf("* Dislivello in salita:\t%.2lf\n", r->ascent);
-  printf("* Velocità media:\t%.2lf\n", r->avgspeed);
-  printf("* Velocità massima:\t%.2lf\n", r->maxspeed);
+  printf("* Distanza (Km):\t\t%8.2lf\n", r->distance);
+  printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
+  printf("* Dislivello in discesa (m):\t%8.2lf\n", r->descent);
+  printf("* Velocità media (Km/h):\t%8.2lf\n", r->avgspeed);
+  printf("* Velocità massima (Km/h):\t%8.2lf\n", r->maxspeed);
+  printf("\n");
 }
 
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode) {
@@ -206,4 +219,8 @@ gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode) {
 
   gp.elevation = strtod(elevation->nodesetval->nodeTab[0]->content, &end);
   return gp;
+}
+
+double getAscent(const gpxPoint *p1, const gpxPoint *p2) {
+  return (p1->elevation - p2->elevation);
 }
