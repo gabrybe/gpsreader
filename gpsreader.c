@@ -53,6 +53,8 @@ typedef struct {
   double descent;
   double avgspeed;
   double totalTime;
+  double minElevation;
+  double maxElevation;
 } metrics;
 
 // tipi custom: Rappresentazione di un punto GPX
@@ -125,7 +127,7 @@ int main(int argc, char *argv[]) {
 
     printf("Traccia %d\n", n);
     xmlNodePtr node = trackNodes->nodeTab[n];
-    
+
     // Se non è un nodo XML (XML_ELEMENT_NODE è un elemento dell'enum xmlElementType), si passa al prossimo
     if(trackNodes->nodeTab[n]->type != XML_ELEMENT_NODE) continue;
 
@@ -156,6 +158,10 @@ int main(int argc, char *argv[]) {
       // se siamo al primo elemento, il punto "precedente" è il punto stesso;
       if (p == 0) {
         prevPoint = currPoint;
+
+        // impostazione di minima e massima altezza a partire dal primo punto, così si ha un termine di paragone
+        result.minElevation = currPoint.elevation;
+        result.maxElevation = currPoint.elevation;
       }
 
       // ascesa (o discesa)
@@ -171,6 +177,14 @@ int main(int argc, char *argv[]) {
 
       // tempo rispetto al punto precedente
       result.totalTime += difftime(mktime(&(currPoint.time)), mktime(&(prevPoint.time)));
+
+      if (currPoint.elevation < result.minElevation) {
+        result.minElevation = currPoint.elevation;
+      }
+
+      if (currPoint.elevation > result.maxElevation) {
+        result.maxElevation = currPoint.elevation;
+      }
 
       // il punto appena elaborato diventa il "punto precedente"
       prevPoint = currPoint;
@@ -333,9 +347,11 @@ void printResults(const char *filename, const metrics *r) {
 
   printf("* Nome traccia: %s\n", r->name);
   printf("* Distanza (Km):\t\t%8.2lf\n", r->distance);
-  printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
-  printf("* Dislivello in discesa (m):\t%8.2lf\n", r->descent);
   printf("* Tempo impiegato (h:m:s):\t%02d:%02d:%02d\n", totalTime.tm_hour, totalTime.tm_min, totalTime.tm_sec);
   printf("* Velocità media (Km/h):\t%8.2lf\n", r->avgspeed);
+  printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
+  printf("* Dislivello in discesa (m):\t%8.2lf\n", r->descent);
+  printf("* Quota massima (m):\t\t%8.2lf\n", r->maxElevation);
+  printf("* Quota minima (m):\t\t%8.2lf\n", r->minElevation);
   printf("\n");
 }
