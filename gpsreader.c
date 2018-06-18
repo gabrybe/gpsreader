@@ -47,10 +47,10 @@
 
 // tipi custom: Risultati finali
 typedef struct {
+  char name[50];
   double distance;
   double ascent;
   double descent;
-  double maxspeed;
   double avgspeed;
   double totalTime;
 } metrics;
@@ -66,7 +66,6 @@ typedef struct {
 // prototipi delle funzioni
 int fileExists(const char *filename);
 
-void printNode(const xmlNodePtr n);
 void printResults(const char *filename, const metrics *r);
 void printPoint(const gpxPoint *p, int pointNumber);
 struct tm seconds2tm(const double *timeInSeconds);
@@ -74,8 +73,9 @@ struct tm seconds2tm(const double *timeInSeconds);
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
 double getAscent(const gpxPoint *p1, const gpxPoint *p2);
 double getDistance(double lat1, double lon1, double lat2, double lon2);
-double getAvgSpeed(double distance, double timeInSeconds);
+double getAvgSpeed(double *distance, double *timeInSeconds);
 
+void getTrackName(const xmlDocPtr doc, const xmlNodePtr node, char *trackName);
 xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node);
 xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx);
 xmlXPathObjectPtr getPoints(const xmlXPathContextPtr ctx);
@@ -92,10 +92,7 @@ int main(int argc, char *argv[]) {
     printf("Uso:\n\tgpsreader [file]\n\n\t[file]\n\tpercorso completo del file GPX da esaminare.\n");
     return 1;
   }
-
-  // contenitore risultati in output
-  metrics result = {0};
-
+  
   // Inizializzazione parser libxml
   xmlInitParser();
 
@@ -118,26 +115,32 @@ int main(int argc, char *argv[]) {
 
   printf("Numero tracce: %d\n",tracks->nodesetval->nodeNr);
 
-  // nodi della traccia
+  // loop sulle tracce (nodi "trk")
   xmlNodeSetPtr trackNodes = tracks->nodesetval;
 
-  for (int n = 0; n < tracks->nodesetval->nodeNr; n++) {
-    printf("Traccia %d\n", n);
-    xmlNodePtr node = tracks->nodesetval->nodeTab[n];
+  for (int n = 0; n < trackNodes->nodeNr; n++) {
 
+    // contenitore risultati in output
+    metrics result = {0};
+
+    printf("Traccia %d\n", n);
+    xmlNodePtr node = trackNodes->nodeTab[n];
+    
     // Se non è un nodo XML (XML_ELEMENT_NODE è un elemento dell'enum xmlElementType), si passa al prossimo
     if(trackNodes->nodeTab[n]->type != XML_ELEMENT_NODE) continue;
 
     // nell'ambito di questa traccia devo cercare i punti che la compongono; serve quindi creare un altro contesto per valutare 
     // l'espressione XPath di ricerca
     xmlXPathContextPtr trackContext = createXPathContext(xmlDoc, trackNodes->nodeTab[n]);
-    
+
+    getTrackName(xmlDoc, trackNodes->nodeTab[n], result.name);
+
     // recupero dei punti della traccia
     xmlXPathObjectPtr points = getPoints(trackContext);
 
     // variabili di comodo
-    gpxPoint currPoint;
-    gpxPoint prevPoint;
+    gpxPoint currPoint = {0};
+    gpxPoint prevPoint = {0};
 
     for (int p = 0; p < points->nodesetval->nodeNr; p++) {
       //printf("\tPunto %d\n", p);
@@ -145,7 +148,7 @@ int main(int argc, char *argv[]) {
       // aggiorno i risultati calcolando
       // * la distanza del punto dal precedente
       // * il dislivello
-      // * la velocità media e massima
+      // * la velocità media
       xmlNodePtr pointNode = points->nodesetval->nodeTab[p];
       
       currPoint = getPointData(xmlDoc, pointNode);
@@ -161,7 +164,7 @@ int main(int argc, char *argv[]) {
       // dislivello positivo (salita) o negativo (discesa)
       (ascent > 0) ? (result.ascent += ascent) : (result.descent += fabs(ascent));
 
-      printPoint(&currPoint, p);
+      // printPoint(&currPoint, p);
       
       // distanza dal punto precedente
       result.distance += fabs(getDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon)); 
@@ -174,14 +177,16 @@ int main(int argc, char *argv[]) {
     
     } // for
 
-    // dati finali (velocità media)
-    result.avgspeed = getAvgSpeed(result.distance, result.totalTime);
+    // Calcolo della velocità media
+    result.avgspeed = getAvgSpeed(&(result.distance), &(result.totalTime));
 
     // stampa dei risultati finali
     printResults(filename, &result);
 
+    // free
+    xmlXPathFreeObject(points);
+    xmlXPathFreeContext(trackContext);
   }
-
   
   // free
   xmlFreeDoc(xmlDoc);
@@ -189,6 +194,14 @@ int main(int argc, char *argv[]) {
 
   // uscita senza errori
   return 0;
+}
+
+// Verifica se esiste il file passato in ingresso
+// il qualificatore "const" impedisce la modifica della variabile passata per reference nell'argomento della funzione
+int fileExists(const char *filename) {
+  FILE *fp = fopen (filename, "r");
+  if (fp!=NULL) fclose (fp);
+  return (fp!=NULL);
 }
 
 // funzione di utilità: crea un contesto nell'ambito del documento XML nel quale sarà valutata una certa espressione XPath
@@ -201,14 +214,6 @@ xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node) {
   return ctx;
 }
 
-// Verifica se esiste il file passato in ingresso
-// il qualificatore "const" impedisce la modifica della variabile passata per reference nell'argomento della funzione
-int fileExists(const char *filename) {
-  FILE *fp = fopen (filename, "r");
-  if (fp!=NULL) fclose (fp);
-  return (fp!=NULL);
-}
-
 // recupero delle tracce/segmenti dal document
 xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx) {
   return xmlXPathEvalExpression((xmlChar*)"//gpx:trk/gpx:trkseg", ctx);  
@@ -219,37 +224,18 @@ xmlXPathObjectPtr getPoints(const xmlXPathContextPtr ctx) {
   return xmlXPathEvalExpression((xmlChar*)"//gpx:trkpt", ctx);  
 }
 
-// stampa il contenuto di un nodo XML
-void printNode(const xmlNodePtr n) {
-  printf("\ttype %d\n", n->type);
-  printf("\tname %s\n", n->name);
-  printf("\tcontent %s\n", n->content);
-}
-
-// stampa una struct gpxPoint
-void printPoint(const gpxPoint *p, int pointNumber) {
+// restituisce il nome della traccia
+void getTrackName(const xmlDocPtr doc, const xmlNodePtr node, char *trackName) {
+  xmlXPathContextPtr trackContext = createXPathContext(doc, node);
+  xmlXPathObjectPtr name = xmlXPathEvalExpression((xmlChar*)"//gpx:name/text()", trackContext);
   
-  char formattedTime[80];
-  strftime(formattedTime, sizeof(formattedTime), "%Y-%m-%d %H:%M:%s", &(p->time));
-  printf("Punto %d\tquota: %.2lf\t%.2f\t%.2f\t%s\n", pointNumber, p->elevation, p->lat, p->lon, formattedTime);
+  strcpy(trackName, name->nodesetval->nodeTab[0]->content);
+
+  xmlXPathFreeObject(name);
+  xmlXPathFreeContext(trackContext);
 }
 
-// stampa risultati
-void printResults(const char *filename, const metrics *r) {
-
-  // si fa qui solo per esigenze di formattazione (in result infatti ci sono solo dati "grezzi", non formattati)
-  struct tm totalTime = seconds2tm(&(r->totalTime));
-  
-  printf("Risultati elaborazione file %s\n\n", filename);
-  printf("* Distanza (Km):\t\t%8.2lf\n", r->distance);
-  printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
-  printf("* Dislivello in discesa (m):\t%8.2lf\n", r->descent);
-  printf("* Tempo impiegato:\t\t%dh %dm %ds\n", totalTime.tm_hour, totalTime.tm_min, totalTime.tm_sec);
-  printf("* Velocità media (Km/h):\t%8.2lf\n", r->avgspeed);
-  // printf("* Velocità massima (Km/h):\t%8.2lf\n", r->maxspeed);
-  printf("\n");
-}
-
+// converte i dati di un nodo XML "trkpt" in una struct più facilmente manipolabile
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode) {
   gpxPoint gp;
   char *end;
@@ -265,7 +251,6 @@ gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode) {
   if (elevation) xmlXPathFreeObject(elevation);
   xmlXPathFreeContext(eleContext);
 
-
   // latitudine/longitudine: negli attributi "lat" e "lon" del trkpt
   if (xmlHasProp(pointNode, (xmlChar*)"lat") && xmlHasProp(pointNode, (xmlChar*)"lon")) {
     xmlChar *lat = xmlGetProp(pointNode, (xmlChar*)"lat");
@@ -276,7 +261,6 @@ gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode) {
   }
 
   // tempo: nel campo "time"
-  // quota del punto: nel campo "ele"
   xmlXPathContextPtr timeContext = createXPathContext(doc, pointNode);
   xmlXPathObjectPtr timeResult = xmlXPathEvalExpression((xmlChar*)"gpx:time/text()", timeContext);
 
@@ -326,7 +310,32 @@ struct tm seconds2tm(const double *timeInSeconds) {
   return result;
 }
 
-// ricava la velocità media data una distanza in Km ed un tempo in secondi
-double getAvgSpeed(double distance, double timeInSeconds) {
-  return ((distance * 1000 / timeInSeconds) * 3.6);
+// calcola la velocità media in Km/h data una distanza in Km ed un tempo in secondi
+double getAvgSpeed(double *distance, double *timeInSeconds) {
+  return ((*distance * 1000 / *timeInSeconds) * 3.6);
+}
+
+// stampa una struct gpxPoint
+void printPoint(const gpxPoint *p, int pointNumber) {
+  
+  char formattedTime[80];
+  strftime(formattedTime, sizeof(formattedTime), "%Y-%m-%d %H:%M:%s", &(p->time));
+  printf("Punto %d\tquota: %.2lf\t%.2f\t%.2f\t%s\n", pointNumber, p->elevation, p->lat, p->lon, formattedTime);
+}
+
+// stampa risultati
+void printResults(const char *filename, const metrics *r) {
+
+  // si fa qui solo per esigenze di formattazione (in result infatti ci sono solo dati "grezzi", non formattati)
+  struct tm totalTime = seconds2tm(&(r->totalTime));
+  
+  printf("Risultati elaborazione file: %s\n\n", filename);
+
+  printf("* Nome traccia: %s\n", r->name);
+  printf("* Distanza (Km):\t\t%8.2lf\n", r->distance);
+  printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
+  printf("* Dislivello in discesa (m):\t%8.2lf\n", r->descent);
+  printf("* Tempo impiegato (h:m:s):\t%02d:%02d:%02d\n", totalTime.tm_hour, totalTime.tm_min, totalTime.tm_sec);
+  printf("* Velocità media (Km/h):\t%8.2lf\n", r->avgspeed);
+  printf("\n");
 }
