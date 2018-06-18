@@ -52,7 +52,7 @@ typedef struct {
   double descent;
   double maxspeed;
   double avgspeed;
-  double totalTime; // non sarà un double
+  double totalTime;
 } metrics;
 
 // tipi custom: Rappresentazione di un punto GPX
@@ -63,19 +63,22 @@ typedef struct {
   struct tm time;
 } gpxPoint;
 
-
 // prototipi delle funzioni
 int fileExists(const char *filename);
+
 void printNode(const xmlNodePtr n);
 void printResults(const char *filename, const metrics *r);
 void printPoint(const gpxPoint *p, int pointNumber);
+struct tm seconds2tm(const double *timeInSeconds);
+
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
 double getAscent(const gpxPoint *p1, const gpxPoint *p2);
 double getDistance(double lat1, double lon1, double lat2, double lon2);
+double getAvgSpeed(double distance, double timeInSeconds);
+
 xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node);
 xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx);
 xmlXPathObjectPtr getPoints(const xmlXPathContextPtr ctx);
-
 
 // main
 int main(int argc, char *argv[]) {
@@ -91,7 +94,7 @@ int main(int argc, char *argv[]) {
   }
 
   // contenitore risultati in output
-  metrics result;
+  metrics result = {0};
 
   // Inizializzazione parser libxml
   xmlInitParser();
@@ -147,38 +150,32 @@ int main(int argc, char *argv[]) {
       
       currPoint = getPointData(xmlDoc, pointNode);
 
-      // se siamo al primo elemento, il punto "precedente" è il punto stesso
+      // se siamo al primo elemento, il punto "precedente" è il punto stesso;
       if (p == 0) {
         prevPoint = currPoint;
       }
 
       // ascesa (o discesa)
       double ascent = getAscent(&currPoint, &prevPoint);
-      // dislivello positivo (salita)
-      if (ascent > 0) {
-        result.ascent += ascent;
-      } else {
-        // dislivello negativo (discesa)
-        result.descent += fabs(ascent);
-      }
+
+      // dislivello positivo (salita) o negativo (discesa)
+      (ascent > 0) ? (result.ascent += ascent) : (result.descent += fabs(ascent));
 
       printPoint(&currPoint, p);
       
       // distanza dal punto precedente
       result.distance += fabs(getDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon)); 
 
-      // aggiornamento delle statistiche
-      // updateMetrics(*metrics, currPoint, prevPoint);
+      // tempo rispetto al punto precedente
+      result.totalTime += difftime(mktime(&(currPoint.time)), mktime(&(prevPoint.time)));
 
       // il punto appena elaborato diventa il "punto precedente"
       prevPoint = currPoint;
     
     } // for
 
-    // tempo impiegato
-    //result.totalTime = getTotalTime(points->nodesetval);
-
-    printNode(node);
+    // dati finali (velocità media)
+    result.avgspeed = getAvgSpeed(result.distance, result.totalTime);
 
     // stampa dei risultati finali
     printResults(filename, &result);
@@ -231,20 +228,7 @@ void printNode(const xmlNodePtr n) {
 
 // stampa una struct gpxPoint
 void printPoint(const gpxPoint *p, int pointNumber) {
-  /*
-time_t     now;
-    struct tm  ts;
-    char       buf[80];
-
-    // Get current time
-    time(&now);
-
-    // Format time, "ddd yyyy-mm-dd hh:mm:ss zzz"
-    ts = *localtime(&now);
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S %Z", &ts);
-    printf("%s\n", buf);
-    return 0;
-  */
+  
   char formattedTime[80];
   strftime(formattedTime, sizeof(formattedTime), "%Y-%m-%d %H:%M:%s", &(p->time));
   printf("Punto %d\tquota: %.2lf\t%.2f\t%.2f\t%s\n", pointNumber, p->elevation, p->lat, p->lon, formattedTime);
@@ -252,13 +236,17 @@ time_t     now;
 
 // stampa risultati
 void printResults(const char *filename, const metrics *r) {
+
+  // si fa qui solo per esigenze di formattazione (in result infatti ci sono solo dati "grezzi", non formattati)
+  struct tm totalTime = seconds2tm(&(r->totalTime));
+  
   printf("Risultati elaborazione file %s\n\n", filename);
   printf("* Distanza (Km):\t\t%8.2lf\n", r->distance);
   printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
   printf("* Dislivello in discesa (m):\t%8.2lf\n", r->descent);
-  printf("* Tempo impiegato:\t%8.2lf\n", r->totalTime);
+  printf("* Tempo impiegato:\t\t%dh %dm %ds\n", totalTime.tm_hour, totalTime.tm_min, totalTime.tm_sec);
   printf("* Velocità media (Km/h):\t%8.2lf\n", r->avgspeed);
-  printf("* Velocità massima (Km/h):\t%8.2lf\n", r->maxspeed);
+  // printf("* Velocità massima (Km/h):\t%8.2lf\n", r->maxspeed);
   printf("\n");
 }
 
@@ -292,13 +280,13 @@ gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode) {
   xmlXPathContextPtr timeContext = createXPathContext(doc, pointNode);
   xmlXPathObjectPtr timeResult = xmlXPathEvalExpression((xmlChar*)"gpx:time/text()", timeContext);
 
+  // inizializza a zero tutta la chiave "time", altrimenti si possono verificare errori di "segmentation fault (core dumped)"
   memset(&(gp.time), 0, sizeof(struct tm));
   strptime((char*)timeResult->nodesetval->nodeTab[0]->content, "%Y-%m-%dT%H:%M:%SZ", &(gp.time));
 
   // free
   if (timeResult) xmlXPathFreeObject(timeResult);
   xmlXPathFreeContext(timeContext);
-
 
   return gp;
 }
@@ -321,4 +309,24 @@ double getDistance(double lat1, double lon1, double lat2, double lon2) {
   double c = 2 * asin(sqrt(a));
 
   return EARTH_RADIUS * c;
+}
+
+// crea una struct tm a partire da un numero di secondi
+struct tm seconds2tm(const double *timeInSeconds) {
+  unsigned int hours = (int) (*timeInSeconds / 3600.0);
+  int minutes = (int) ((*timeInSeconds - (3600 * hours)) / 60.0);
+  int seconds = (int) (*timeInSeconds - (3600 * hours) - (60 * minutes));
+
+  struct tm result = {0};
+
+  result.tm_sec = seconds;
+  result.tm_min = minutes;
+  result.tm_hour = hours;
+
+  return result;
+}
+
+// ricava la velocità media data una distanza in Km ed un tempo in secondi
+double getAvgSpeed(double distance, double timeInSeconds) {
+  return ((distance * 1000 / timeInSeconds) * 3.6);
 }
