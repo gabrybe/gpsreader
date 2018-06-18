@@ -1,16 +1,22 @@
 # gpsreader
-C Course Project - reads a GPX file and extracts some metrics.
+C Course Project - reads a GPX file and extracts the following metrics:
 
-Compile:
+* Distance
+* Time
+* Average speed
+* Elevation
 
-gcc /usr/src/gpsreader/gpsreader.c -o /usr/src/gpsreader/gpsreader.out -Iusr/include/libxml2 -lxml2
+## How to compile:
+
+gcc /usr/src/gpsreader/gpsreader.c -o /usr/src/gpsreader/gpsreader.out -Iusr/include/libxml2 -lxml2 -lm
 
 -I: posizione degli header files di libxml2
 -lxml2: specifica di cercare il file libxml2.a nella cartella standard delle librerie
+-lm: specifica di caricare anche la libreria libm.a per le funzioni matematiche
 
 Run:
 
-/usr/src/gpsreader.out
+/usr/src/gpsreader.out [nomefile GPX]
 
-oppure da /usr/src: ./gpsreader.out
+oppure da /usr/src: ./gpsreader.out [nomefile GPX]
 
