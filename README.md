@@ -5,6 +5,7 @@ C Course Project - reads a GPX file and extracts the following metrics:
 * Time
 * Average speed
 * Elevation
+* Max/min height
 
 ## How to compile:
 

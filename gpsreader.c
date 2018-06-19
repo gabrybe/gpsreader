@@ -1,11 +1,11 @@
-//
 // GPSReader: legge un file GPX e ne estrae alcune metriche
+// MIT License - gabriele.bernuzzi@studenti.unimi.it
 //
 // - la distanza totale percorsa
 // - il tempo impiegato
 // - il dislivello in salita e discesa accumulato
-// - la velocità media e massima
-// - l'altitudine massima raggiunta
+// - la velocità media
+// - le quote altimetriche massime e minime raggiunte
 // - ...
 //
 // Alcuni punti chiave dello sviluppo:
@@ -19,15 +19,14 @@
 // Uso: gpsreader [file]
 // Compilazione:
 // gcc gpsreader.c -o gpsreader.out -I/usr/include/libxml2 -lxml2 -lm
-
+//
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <math.h>
 
-#define __USE_XOPEN // Per strptime
+#define __USE_XOPEN // Per strptime, altrimenti la definizione non viene trovata
 #include <time.h>
 
 // libxml2
@@ -67,9 +66,15 @@ typedef struct {
 
 // prototipi delle funzioni
 int fileExists(const char *filename);
+int processFile(const char *filename);
 
+// global variable per attivare la modalità di debugging
+int _DEBUG_ = 0;
+
+void getResults(gpxPoint *pts, int size, metrics *r);
 void printResults(const char *filename, const metrics *r);
 void printPoint(const gpxPoint *p, int pointNumber);
+void printAsciiAltiGraph(const metrics *r);
 struct tm seconds2tm(const double *timeInSeconds);
 
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
@@ -79,22 +84,33 @@ double getAvgSpeed(double *distance, double *timeInSeconds);
 
 void getTrackName(const xmlDocPtr doc, const xmlNodePtr node, char *trackName);
 xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node);
-xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx);
+xmlXPathObjectPtr getTrackSegments(const xmlXPathContextPtr ctx);
 xmlXPathObjectPtr getPoints(const xmlXPathContextPtr ctx);
 
 // main
 int main(int argc, char *argv[]) {
 
   const char *filename = argv[1];
+  
+  // per attivare il debug
+  _DEBUG_ = ((argc > 2) ? atoi(argv[2]) : 0);
 
-  printf("C GPS Reader\n");
+  printf("C GPS Reader - v1.0\n");
 
   // validazione argomenti
   if (argc < 2 || !fileExists(filename)) {
     printf("Uso:\n\tgpsreader [file]\n\n\t[file]\n\tpercorso completo del file GPX da esaminare.\n");
     return 1;
   }
-  
+
+  if (_DEBUG_) { printf("\n\t[Debug mode ON]\n"); }
+    
+  return processFile(filename);
+}
+
+// processing del file XML
+int processFile(const char *filename) {
+
   // Inizializzazione parser libxml
   xmlInitParser();
 
@@ -109,23 +125,24 @@ int main(int argc, char *argv[]) {
   xmlXPathRegisterNs(docContext, (xmlChar*)"gpx", (xmlChar*) GPX_NAMESPACE_STR);
 
   // Ricerca dei segmenti della traccia: sono nel nodo /gpx/trk/trkseg (posso avere piu' trk in un file)
-  xmlXPathObjectPtr tracks = getTracks(docContext);
-  if(tracks == NULL || xmlXPathNodeSetIsEmpty(tracks->nodesetval)){
-    printf("Non ho trovato tracce nel file \"%s\"\n", argv[1]);
+  xmlXPathObjectPtr trackSegments = getTrackSegments(docContext);
+  if(trackSegments == NULL || xmlXPathNodeSetIsEmpty(trackSegments->nodesetval)){
+    printf("Non ho trovato tracce nel file \"%s\"\n", filename);
     return 1;
   }
 
-  printf("Numero tracce: %d\n",tracks->nodesetval->nodeNr);
+  if (_DEBUG_) { printf("Numero segmenti traccia: %d\n",trackSegments->nodesetval->nodeNr); }
 
   // loop sulle tracce (nodi "trk")
-  xmlNodeSetPtr trackNodes = tracks->nodesetval;
+  xmlNodeSetPtr trackNodes = trackSegments->nodesetval;
 
   for (int n = 0; n < trackNodes->nodeNr; n++) {
 
     // contenitore risultati in output
-    metrics result = {0};
+    metrics results = {0};
+    
+    if (_DEBUG_) { printf("Segmento %d\n", n); }
 
-    printf("Traccia %d\n", n);
     xmlNodePtr node = trackNodes->nodeTab[n];
 
     // Se non è un nodo XML (XML_ELEMENT_NODE è un elemento dell'enum xmlElementType), si passa al prossimo
@@ -135,79 +152,96 @@ int main(int argc, char *argv[]) {
     // l'espressione XPath di ricerca
     xmlXPathContextPtr trackContext = createXPathContext(xmlDoc, trackNodes->nodeTab[n]);
 
-    getTrackName(xmlDoc, trackNodes->nodeTab[n], result.name);
+    // nome della traccia (si trova nel nodo "name")
+    getTrackName(xmlDoc, trackNodes->nodeTab[n], results.name);
 
     // recupero dei punti della traccia
     xmlXPathObjectPtr points = getPoints(trackContext);
 
-    // variabili di comodo
-    gpxPoint currPoint = {0};
-    gpxPoint prevPoint = {0};
-
-    for (int p = 0; p < points->nodesetval->nodeNr; p++) {
-      //printf("\tPunto %d\n", p);
-
-      // aggiorno i risultati calcolando
-      // * la distanza del punto dal precedente
-      // * il dislivello
-      // * la velocità media
-      xmlNodePtr pointNode = points->nodesetval->nodeTab[p];
-      
-      currPoint = getPointData(xmlDoc, pointNode);
-
-      // se siamo al primo elemento, il punto "precedente" è il punto stesso;
-      if (p == 0) {
-        prevPoint = currPoint;
-
-        // impostazione di minima e massima altezza a partire dal primo punto, così si ha un termine di paragone
-        result.minElevation = currPoint.elevation;
-        result.maxElevation = currPoint.elevation;
-      }
-
-      // ascesa (o discesa)
-      double ascent = getAscent(&currPoint, &prevPoint);
-
-      // dislivello positivo (salita) o negativo (discesa)
-      (ascent > 0) ? (result.ascent += ascent) : (result.descent += fabs(ascent));
-
-      // printPoint(&currPoint, p);
-      
-      // distanza dal punto precedente
-      result.distance += fabs(getDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon)); 
-
-      // tempo rispetto al punto precedente
-      result.totalTime += difftime(mktime(&(currPoint.time)), mktime(&(prevPoint.time)));
-
-      if (currPoint.elevation < result.minElevation) {
-        result.minElevation = currPoint.elevation;
-      }
-
-      if (currPoint.elevation > result.maxElevation) {
-        result.maxElevation = currPoint.elevation;
-      }
-
-      // il punto appena elaborato diventa il "punto precedente"
-      prevPoint = currPoint;
+    // Costruisco un array per contenere i dati di tutti i punti, in modo da non doverli più leggere da XML
+    gpxPoint *allPoints = malloc(sizeof(gpxPoint) * points->nodesetval->nodeNr);
     
-    } // for
+    for (int p = 0; p < points->nodesetval->nodeNr; p++) {
+      // shortcut
+      xmlNodePtr pointNode = points->nodesetval->nodeTab[p];
 
-    // Calcolo della velocità media
-    result.avgspeed = getAvgSpeed(&(result.distance), &(result.totalTime));
+      allPoints[p] = getPointData(xmlDoc, pointNode);      
 
-    // stampa dei risultati finali
-    printResults(filename, &result);
+      //printf("Punto %lf", allPoints[p].elevation);
+    }
 
+    getResults(allPoints, points->nodesetval->nodeNr, &results);
+    
     // free
     xmlXPathFreeObject(points);
     xmlXPathFreeContext(trackContext);
-  }
+    
+    // stampa dei risultati finali
+    printResults(filename, &results);
+  
+    free(allPoints);
+  } // for n
   
   // free
   xmlFreeDoc(xmlDoc);
   xmlCleanupParser();
 
-  // uscita senza errori
   return 0;
+}
+
+// dato un array di punti, calcola le metriche da inserire nei risultati finali
+void getResults(gpxPoint *pts, int size, metrics *r) {  
+
+  // variabili di comodo
+  gpxPoint currPoint = {0};
+  gpxPoint prevPoint = {0};
+
+  // loop sull'array dei punti
+  for (int p = 0; p < size; p++) {
+    
+    // struct con i dati del punto corrente
+    currPoint = pts[p];
+
+    if (_DEBUG_) { printPoint(&currPoint, p); }
+
+    // se siamo al primo elemento, il punto "precedente" è il punto stesso;
+    if (p == 0) {
+      prevPoint = currPoint;
+
+      // impostazione di minima e massima altezza a partire dal primo punto, così si ha un termine di paragone
+      r->minElevation = currPoint.elevation;
+      r->maxElevation = currPoint.elevation;
+    }
+
+    // ascesa (o discesa)
+    double ascent = getAscent(&currPoint, &prevPoint);
+
+    // dislivello positivo (salita) o negativo (discesa)
+    (ascent > 0) ? (r->ascent += ascent) : (r->descent += fabs(ascent));
+    
+    // distanza dal punto precedente
+    r->distance += fabs(getDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon)); 
+
+    // tempo rispetto al punto precedente
+    r->totalTime += difftime(mktime(&(currPoint.time)), mktime(&(prevPoint.time)));
+
+    // quota minima/massima
+    if (currPoint.elevation < r->minElevation) {
+      r->minElevation = currPoint.elevation;
+    }
+
+    if (currPoint.elevation > r->maxElevation) {
+      r->maxElevation = currPoint.elevation;
+    }
+
+    // il punto appena elaborato diventa il "punto precedente"
+    prevPoint = currPoint;
+  
+  } // for p
+
+  // Calcolo della velocità media
+  r->avgspeed = getAvgSpeed(&(r->distance), &(r->totalTime));
+
 }
 
 // Verifica se esiste il file passato in ingresso
@@ -229,7 +263,7 @@ xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node) {
 }
 
 // recupero delle tracce/segmenti dal document
-xmlXPathObjectPtr getTracks(const xmlXPathContextPtr ctx) {
+xmlXPathObjectPtr getTrackSegments(const xmlXPathContextPtr ctx) {
   return xmlXPathEvalExpression((xmlChar*)"//gpx:trk/gpx:trkseg", ctx);  
 }
 
@@ -343,15 +377,41 @@ void printResults(const char *filename, const metrics *r) {
   // si fa qui solo per esigenze di formattazione (in result infatti ci sono solo dati "grezzi", non formattati)
   struct tm totalTime = seconds2tm(&(r->totalTime));
   
-  printf("Risultati elaborazione file: %s\n\n", filename);
+  printf("\nRisultati elaborazione file: <%s>\n\n", filename);
 
-  printf("* Nome traccia: %s\n", r->name);
+  printf("* Nome traccia: <%s>\n\n", r->name);
   printf("* Distanza (Km):\t\t%8.2lf\n", r->distance);
   printf("* Tempo impiegato (h:m:s):\t%02d:%02d:%02d\n", totalTime.tm_hour, totalTime.tm_min, totalTime.tm_sec);
-  printf("* Velocità media (Km/h):\t%8.2lf\n", r->avgspeed);
+  printf("* Velocità media (Km/h):\t%8.2lf\n\n", r->avgspeed);
   printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
-  printf("* Dislivello in discesa (m):\t%8.2lf\n", r->descent);
+  printf("* Dislivello in discesa (m):\t%8.2lf\n\n", r->descent);
   printf("* Quota massima (m):\t\t%8.2lf\n", r->maxElevation);
   printf("* Quota minima (m):\t\t%8.2lf\n", r->minElevation);
   printf("\n");
+
+  printAsciiAltiGraph(r);
+}
+
+// grafico altimetrico ascii usando una matrice con caratteri di riempimento
+// l'idea è per ogni tratto "distanceUnit" calcolare l'altezza media, 
+// e riempire tanti quadretti in altezza quante sono le heightUnit dell'altezza media
+void printAsciiAltiGraph(const metrics *r) {
+  
+  // matrice 40r * 80c
+  int matrix[4][8];
+
+  // ogni quadrato, a quanti m di quota corrisponde? (quota max - min): quota max = 40 : x => delta * 40/quota max
+  double heightUnit = (r->maxElevation - r->minElevation) / 40.0;
+  double distanceUnit = (r->distance) / 80.0;
+
+  printf ("D.U and H.U. %lf %lf\n", distanceUnit, heightUnit);
+
+  for (int r = 0; r < 4; r++) {
+    for (int c = 0; c < 8; c++) {
+      matrix[r][c] = r * c;
+      printf("%d ", matrix[r][c]);
+    }
+    printf("\n");
+  }
+
 }
