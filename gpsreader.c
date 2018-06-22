@@ -38,11 +38,14 @@
 // namespace che identifica i GPX
 #define GPX_NAMESPACE_STR "http://www.topografix.com/GPX/1/1"
 
-// raggio terrestre (in Km) come implementato sui GPS
-#define EARTH_RADIUS 6378.13
+// raggio terrestre (in m) come implementato sui GPS
+#define EARTH_RADIUS 6378.13 * 1000
 
 // fattore di conversione tra gradi e radianti (pi/180)
 #define GRAD_TO_RAD (3.1415926536 / 180)
+
+// carattere usato per rappresentare il grafico altimetrico
+#define ALTIGRAPH_FILL_CHAR '*'
 
 // tipi custom: Risultati finali
 typedef struct {
@@ -64,23 +67,27 @@ typedef struct {
   struct tm time;
 } gpxPoint;
 
-// prototipi delle funzioni
-int fileExists(const char *filename);
-int processFile(const char *filename);
 
 // global variable per attivare la modalità di debugging
 int _DEBUG_ = 0;
 
-void getResults(gpxPoint *pts, int size, metrics *r);
+// prototipi delle funzioni
+int fileExists(const char *filename);
+int processFile(const char *filename);
+
+void getResults(gpxPoint *pointSet, int size, metrics *r);
 void printResults(const char *filename, const metrics *r);
 void printPoint(const gpxPoint *p, int pointNumber);
-void printAsciiAltiGraph(const metrics *r);
+void printAsciiAltiGraph(const metrics *r, const gpxPoint *pointSet, const int numPoints);
+void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], double heightUnit, const double *avgElevation);
+void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *r);
 struct tm seconds2tm(const double *timeInSeconds);
 
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
 double getAscent(const gpxPoint *p1, const gpxPoint *p2);
 double getDistance(double lat1, double lon1, double lat2, double lon2);
 double getAvgSpeed(double *distance, double *timeInSeconds);
+void getAvgElevation(const gpxPoint *pointSet, const int size, double distanceUnit, double *avgElevation, const int avgElevationSize);
 
 void getTrackName(const xmlDocPtr doc, const xmlNodePtr node, char *trackName);
 xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node);
@@ -158,19 +165,16 @@ int processFile(const char *filename) {
     // recupero dei punti della traccia
     xmlXPathObjectPtr points = getPoints(trackContext);
 
+    int numPoints = points->nodesetval->nodeNr;
+
     // Costruisco un array per contenere i dati di tutti i punti, in modo da non doverli più leggere da XML
-    gpxPoint *allPoints = malloc(sizeof(gpxPoint) * points->nodesetval->nodeNr);
+    gpxPoint *allPoints = malloc(sizeof(gpxPoint) * numPoints);
     
-    for (int p = 0; p < points->nodesetval->nodeNr; p++) {
-      // shortcut
-      xmlNodePtr pointNode = points->nodesetval->nodeTab[p];
-
-      allPoints[p] = getPointData(xmlDoc, pointNode);      
-
-      //printf("Punto %lf", allPoints[p].elevation);
+    for (int p = 0; p < numPoints; p++) {
+      allPoints[p] = getPointData(xmlDoc, points->nodesetval->nodeTab[p]);      
     }
 
-    getResults(allPoints, points->nodesetval->nodeNr, &results);
+    getResults(allPoints, numPoints, &results);
     
     // free
     xmlXPathFreeObject(points);
@@ -178,6 +182,9 @@ int processFile(const char *filename) {
     
     // stampa dei risultati finali
     printResults(filename, &results);
+
+    // stampa grafico altimetrico
+    printAsciiAltiGraph(&results, allPoints, numPoints);
   
     free(allPoints);
   } // for n
@@ -190,7 +197,7 @@ int processFile(const char *filename) {
 }
 
 // dato un array di punti, calcola le metriche da inserire nei risultati finali
-void getResults(gpxPoint *pts, int size, metrics *r) {  
+void getResults(gpxPoint *pointSet, int size, metrics *r) {  
 
   // variabili di comodo
   gpxPoint currPoint = {0};
@@ -200,7 +207,7 @@ void getResults(gpxPoint *pts, int size, metrics *r) {
   for (int p = 0; p < size; p++) {
     
     // struct con i dati del punto corrente
-    currPoint = pts[p];
+    currPoint = pointSet[p];
 
     if (_DEBUG_) { printPoint(&currPoint, p); }
 
@@ -241,6 +248,75 @@ void getResults(gpxPoint *pts, int size, metrics *r) {
 
   // Calcolo della velocità media
   r->avgspeed = getAvgSpeed(&(r->distance), &(r->totalTime));
+}
+
+// dato un array di punti traccia, e un'unità di distanza calcola la quota media per ciascuna unità
+void getAvgElevation(const gpxPoint *pointSet, const int numPoints, double distanceUnit, double *avgElevation, const int avgElevationSize) {
+
+  // variabili di comodo
+  gpxPoint currPoint = {0};
+  gpxPoint prevPoint = {0};
+
+  double distance = 0.0;
+  double cd = 0.0;
+  double elevation = 0.0;
+
+  // indice per aggiungere elementi ad avgElevation
+  int i = 0;
+
+  // contatore punti parziali (viene resettato ogni volta che si raggiunge l'unità di distanza)
+  int pc = 0;
+
+  // flag per stabilire se calcolare la quota media
+  int calcAvg = 0;
+
+  // loop sull'array dei punti
+  for (int p = 0; p < numPoints; p++, pc++) {
+
+    // struct con i dati del punto corrente
+    currPoint = pointSet[p];
+
+    // se siamo al primo elemento, il punto "precedente" è il punto stesso;
+    if (p == 0) {
+      prevPoint = currPoint;
+    }
+
+    // distanza dal punto precedente (in km)
+    distance += fabs(getDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon));
+
+    // calcolo della quota media se ho superato l'unità di distanza, oppure sono all'ultimo punto
+    calcAvg = (distance < distanceUnit && (p < numPoints-1)) ? 0 : 1;
+
+    elevation += currPoint.elevation;
+
+    if (calcAvg) {
+      
+      if (_DEBUG_) {
+        printf("Punto: %d, Distanza: %lf, Unita di distanza %d, quota media %lf; ", p, distance, i, elevation/pc);
+      }
+
+      avgElevation[i++] = elevation / (double)pc;
+      
+      // reset contando anche eventuali "sforamenti" rispetto alla distanceUnit
+      distance -= distanceUnit;
+
+      if (_DEBUG_) {
+        printf("Scarto accumulato %lf\n\n ", distance);
+      }
+
+      // reset contatori
+      pc = 0;
+      elevation = 0;
+    }
+
+    prevPoint = currPoint;
+
+  } // for p
+  
+  // stampo l'array avgElevation
+  if (_DEBUG_) {
+    for (int j = 0; j < avgElevationSize; j++) { printf("\navgElevation[%d]: %lf", j, avgElevation[j]); }
+  }
 
 }
 
@@ -360,7 +436,7 @@ struct tm seconds2tm(const double *timeInSeconds) {
 
 // calcola la velocità media in Km/h data una distanza in Km ed un tempo in secondi
 double getAvgSpeed(double *distance, double *timeInSeconds) {
-  return ((*distance * 1000 / *timeInSeconds) * 3.6);
+  return ((*distance / *timeInSeconds) * 3.6);
 }
 
 // stampa una struct gpxPoint
@@ -380,7 +456,7 @@ void printResults(const char *filename, const metrics *r) {
   printf("\nRisultati elaborazione file: <%s>\n\n", filename);
 
   printf("* Nome traccia: <%s>\n\n", r->name);
-  printf("* Distanza (Km):\t\t%8.2lf\n", r->distance);
+  printf("* Distanza (Km):\t\t%8.2lf\n", r->distance / 1000);
   printf("* Tempo impiegato (h:m:s):\t%02d:%02d:%02d\n", totalTime.tm_hour, totalTime.tm_min, totalTime.tm_sec);
   printf("* Velocità media (Km/h):\t%8.2lf\n\n", r->avgspeed);
   printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
@@ -388,30 +464,65 @@ void printResults(const char *filename, const metrics *r) {
   printf("* Quota massima (m):\t\t%8.2lf\n", r->maxElevation);
   printf("* Quota minima (m):\t\t%8.2lf\n", r->minElevation);
   printf("\n");
-
-  printAsciiAltiGraph(r);
+  
 }
 
 // grafico altimetrico ascii usando una matrice con caratteri di riempimento
 // l'idea è per ogni tratto "distanceUnit" calcolare l'altezza media, 
 // e riempire tanti quadretti in altezza quante sono le heightUnit dell'altezza media
-void printAsciiAltiGraph(const metrics *r) {
+void printAsciiAltiGraph(const metrics *r, const gpxPoint *pointSet, const int numPoints) {
   
+  // dimensioni della matrice
+  int cols = 100;
+  int rows = 30;
+
   // matrice 40r * 80c
-  int matrix[4][8];
+  char matrix[rows][cols];
 
   // ogni quadrato, a quanti m di quota corrisponde? (quota max - min): quota max = 40 : x => delta * 40/quota max
-  double heightUnit = (r->maxElevation - r->minElevation) / 40.0;
-  double distanceUnit = (r->distance) / 80.0;
+  double heightUnit = (r->maxElevation) / (double)rows;
+  // ogni quadrato, a quanti m di distanza corrisponde? (distanza totale in m/ scala)
+  double distanceUnit = (r->distance) / (double)cols;
+  if (_DEBUG_) { printf ("Distance Unit (m): %lf Height unit (m): %lf\n", distanceUnit, heightUnit); }
 
-  printf ("D.U and H.U. %lf %lf\n", distanceUnit, heightUnit);
+  double avgElevation[cols];
+  getAvgElevation(pointSet, numPoints, distanceUnit, avgElevation, cols);
 
-  for (int r = 0; r < 4; r++) {
-    for (int c = 0; c < 8; c++) {
-      matrix[r][c] = r * c;
-      printf("%d ", matrix[r][c]);
-    }
-    printf("\n");
+  fillAltiGraphMatrix(rows, cols, matrix, heightUnit, avgElevation);
+
+  printAltiGraphMatrix(rows, cols, matrix, r);
+}
+
+// riempie la matrice inserendo un numero appropriato di * a seconda della quota media di ogni unità di distanza
+void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], double heightUnit, const double *avgElevation) {
+  
+  int numFillChars[cols];
+
+  for (int i = 0; i < cols; i++) {
+    numFillChars[i] = ceil(avgElevation[i] / heightUnit);    
   }
 
+  // loop sulle righe (a partire dall'ultima)
+  for (int r = 0; r < rows; r++) {
+    for (int c = 0; c < cols; c++) {
+      matrix[r][c]=' ';
+      if (r >= rows - numFillChars[c]) {
+        matrix[r][c] = ALTIGRAPH_FILL_CHAR;
+      }
+    }    
+  }
+
+}
+
+// stampa il profilo altimetrico della traccia
+void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *r) {
+  printf("\nGrafico altimetrico\n");
+
+  for (int r = 0; r < rows; r++) {
+    printf("\n[%d]",r);
+    for (int c = 0; c < cols; c++) {
+      printf("%c", matrix[r][c]);
+    }
+  }
+  printf("\n");
 }
