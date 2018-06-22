@@ -39,7 +39,7 @@
 #define GPX_NAMESPACE_STR "http://www.topografix.com/GPX/1/1"
 
 // raggio terrestre (in m) come implementato sui GPS
-#define EARTH_RADIUS 6378.13 * 1000
+#define EARTH_RADIUS 6.37813 * 1000 * 1000
 
 // fattore di conversione tra gradi e radianti (pi/180)
 #define GRAD_TO_RAD (3.1415926536 / 180)
@@ -59,13 +59,19 @@ typedef struct {
   double maxElevation;
 } metrics;
 
-// tipi custom: Rappresentazione di un punto GPX
+// Rappresentazione di un punto GPX
 typedef struct {
   double lat;
   double lon;
   double elevation;
   struct tm time;
 } gpxPoint;
+
+// unità di distanza e di altezza per la stampa del grafico altimetrico
+typedef struct {
+  double height;
+  double distance;
+} altigraphUnits;
 
 
 // global variable per attivare la modalità di debugging
@@ -78,16 +84,16 @@ int processFile(const char *filename);
 void getResults(gpxPoint *pointSet, int size, metrics *r);
 void printResults(const char *filename, const metrics *r);
 void printPoint(const gpxPoint *p, int pointNumber);
-void printAsciiAltiGraph(const metrics *r, const gpxPoint *pointSet, const int numPoints);
-void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], double heightUnit, const double *avgElevation);
-void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *r);
+void printAsciiAltiGraph(const metrics *r, const gpxPoint *pointSet, int numPoints);
+void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], const altigraphUnits *units, const double *avgElevation, int minElevation);
+void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *results, const altigraphUnits *units);
 struct tm seconds2tm(const double *timeInSeconds);
 
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
 double getAscent(const gpxPoint *p1, const gpxPoint *p2);
 double getDistance(double lat1, double lon1, double lat2, double lon2);
 double getAvgSpeed(double *distance, double *timeInSeconds);
-void getAvgElevation(const gpxPoint *pointSet, const int size, double distanceUnit, double *avgElevation, const int avgElevationSize);
+void getAvgElevation(const gpxPoint *pointSet, int size, const altigraphUnits *units, double *avgElevation, int avgElevationSize);
 
 void getTrackName(const xmlDocPtr doc, const xmlNodePtr node, char *trackName);
 xmlXPathContextPtr createXPathContext(xmlDocPtr doc, xmlNodePtr node);
@@ -251,7 +257,7 @@ void getResults(gpxPoint *pointSet, int size, metrics *r) {
 }
 
 // dato un array di punti traccia, e un'unità di distanza calcola la quota media per ciascuna unità
-void getAvgElevation(const gpxPoint *pointSet, const int numPoints, double distanceUnit, double *avgElevation, const int avgElevationSize) {
+void getAvgElevation(const gpxPoint *pointSet, int numPoints, const altigraphUnits *units, double *avgElevation, int avgElevationSize) {
 
   // variabili di comodo
   gpxPoint currPoint = {0};
@@ -285,7 +291,7 @@ void getAvgElevation(const gpxPoint *pointSet, const int numPoints, double dista
     distance += fabs(getDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon));
 
     // calcolo della quota media se ho superato l'unità di distanza, oppure sono all'ultimo punto
-    calcAvg = (distance < distanceUnit && (p < numPoints-1)) ? 0 : 1;
+    calcAvg = (distance < units->distance && (p < numPoints-1)) ? 0 : 1;
 
     elevation += currPoint.elevation;
 
@@ -297,8 +303,8 @@ void getAvgElevation(const gpxPoint *pointSet, const int numPoints, double dista
 
       avgElevation[i++] = elevation / (double)pc;
       
-      // reset contando anche eventuali "sforamenti" rispetto alla distanceUnit
-      distance -= distanceUnit;
+      // reset contando anche eventuali "sforamenti" rispetto all'unità di distanza
+      distance -= units->distance;
 
       if (_DEBUG_) {
         printf("Scarto accumulato %lf\n\n ", distance);
@@ -323,8 +329,10 @@ void getAvgElevation(const gpxPoint *pointSet, const int numPoints, double dista
 // Verifica se esiste il file passato in ingresso
 // il qualificatore "const" impedisce la modifica della variabile passata per reference nell'argomento della funzione
 int fileExists(const char *filename) {
-  FILE *fp = fopen (filename, "r");
-  if (fp!=NULL) fclose (fp);
+  FILE *fp = fopen(filename, "r");
+  if (fp!=NULL) {
+    fclose(fp);
+  }
   return (fp!=NULL);
 }
 
@@ -348,7 +356,7 @@ xmlXPathObjectPtr getPoints(const xmlXPathContextPtr ctx) {
   return xmlXPathEvalExpression((xmlChar*)"//gpx:trkpt", ctx);  
 }
 
-// restituisce il nome della traccia
+// restituisce il nome della traccia, dal nodo "name"
 void getTrackName(const xmlDocPtr doc, const xmlNodePtr node, char *trackName) {
   xmlXPathContextPtr trackContext = createXPathContext(doc, node);
   xmlXPathObjectPtr name = xmlXPathEvalExpression((xmlChar*)"//gpx:name/text()", trackContext);
@@ -468,38 +476,41 @@ void printResults(const char *filename, const metrics *r) {
 }
 
 // grafico altimetrico ascii usando una matrice con caratteri di riempimento
-// l'idea è per ogni tratto "distanceUnit" calcolare l'altezza media, 
-// e riempire tanti quadretti in altezza quante sono le heightUnit dell'altezza media
-void printAsciiAltiGraph(const metrics *r, const gpxPoint *pointSet, const int numPoints) {
+// l'idea è per ogni "unità di distanza" calcolare l'altezza media, 
+// e riempire tanti quadretti in altezza quante sono le "unità di altezza" dell'altezza media
+void printAsciiAltiGraph(const metrics *r, const gpxPoint *pointSet, int numPoints) {
   
   // dimensioni della matrice
   int cols = 100;
-  int rows = 30;
+  int rows = 25;
 
   // matrice 40r * 80c
   char matrix[rows][cols];
 
-  // ogni quadrato, a quanti m di quota corrisponde? (quota max - min): quota max = 40 : x => delta * 40/quota max
-  double heightUnit = (r->maxElevation) / (double)rows;
-  // ogni quadrato, a quanti m di distanza corrisponde? (distanza totale in m/ scala)
-  double distanceUnit = (r->distance) / (double)cols;
-  if (_DEBUG_) { printf ("Distance Unit (m): %lf Height unit (m): %lf\n", distanceUnit, heightUnit); }
+  altigraphUnits units;
+
+  // ogni cella, a quanti m di quota corrisponde? (quota max - min): quota max = 40 : x => delta * 40/quota max
+  units.height = (r->maxElevation - r->minElevation) / (double)rows;
+  // ogni cella, a quanti m di distanza corrisponde? (distanza totale in m/ scala)
+  units.distance = (r->distance) / (double)cols;
+
+  if (_DEBUG_) { printf ("Distance Unit (m): %lf Height unit (m): %lf\n", units.distance, units.height); }
 
   double avgElevation[cols];
-  getAvgElevation(pointSet, numPoints, distanceUnit, avgElevation, cols);
+  getAvgElevation(pointSet, numPoints, &units, avgElevation, cols);
 
-  fillAltiGraphMatrix(rows, cols, matrix, heightUnit, avgElevation);
+  fillAltiGraphMatrix(rows, cols, matrix, &units, avgElevation, r->minElevation);
 
-  printAltiGraphMatrix(rows, cols, matrix, r);
+  printAltiGraphMatrix(rows, cols, matrix, r, &units);
 }
 
-// riempie la matrice inserendo un numero appropriato di * a seconda della quota media di ogni unità di distanza
-void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], double heightUnit, const double *avgElevation) {
+// riempie la matrice inserendo un numero appropriato di caratteri di riempimento a seconda della quota media di ogni unità di distanza
+void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], const altigraphUnits *units, const double *avgElevation, int minElevation) {
   
   int numFillChars[cols];
 
   for (int i = 0; i < cols; i++) {
-    numFillChars[i] = ceil(avgElevation[i] / heightUnit);    
+    numFillChars[i] = ceil((avgElevation[i] - minElevation) / units->height);    
   }
 
   // loop sulle righe (a partire dall'ultima)
@@ -509,20 +520,23 @@ void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], double hei
       if (r >= rows - numFillChars[c]) {
         matrix[r][c] = ALTIGRAPH_FILL_CHAR;
       }
-    }    
-  }
+    } // for c   
+  } // for r
 
 }
 
 // stampa il profilo altimetrico della traccia
-void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *r) {
+void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *results, const altigraphUnits *units) {
   printf("\nGrafico altimetrico\n");
 
   for (int r = 0; r < rows; r++) {
-    printf("\n[%d]",r);
+
+    // per ogni riga si stampa l'altitudine
+    printf("\n[%4.0lf]", results->maxElevation - (r * units->height));
+
     for (int c = 0; c < cols; c++) {
       printf("%c", matrix[r][c]);
-    }
-  }
+    } // for c
+  } // for r
   printf("\n");
 }
