@@ -464,7 +464,7 @@ void printResults(const char *filename, const metrics *r) {
   printf("\nRisultati elaborazione file: <%s>\n\n", filename);
 
   printf("* Nome traccia: <%s>\n\n", r->name);
-  printf("* Distanza (Km):\t\t%8.2lf\n", r->distance / 1000);
+  printf("* Distanza (Km):\t\t%8.2lf\n", r->distance / 1000.0);
   printf("* Tempo impiegato (h:m:s):\t%02d:%02d:%02d\n", totalTime.tm_hour, totalTime.tm_min, totalTime.tm_sec);
   printf("* Velocità media (Km/h):\t%8.2lf\n\n", r->avgspeed);
   printf("* Dislivello in salita (m):\t%8.2lf\n", r->ascent);
@@ -528,15 +528,52 @@ void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], const alti
 // stampa il profilo altimetrico della traccia
 void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *results, const altigraphUnits *units) {
   printf("\nGrafico altimetrico\n");
+  double xlabel = 0.0;
+  
+  // specifica ogni quante unità di distanza stampare il valore della distanza progressiva
+  int printXLabelEvery = 5;
+  // allineamento con la prima colonna di dati effettivi: il + 3 è per contenere le due quadre tra cui è racchiusa l'altezza, e lo spazio che stacca le etichette delle altezze dalla prima colonna
+  int xOffset = printXLabelEvery + 3;
+
+  int xMax = (cols + printXLabelEvery - (cols % printXLabelEvery));
 
   for (int r = 0; r < rows; r++) {
 
     // per ogni riga si stampa l'altitudine
-    printf("\n[%4.0lf]", results->maxElevation - (r * units->height));
+    printf("\n[%5.0lf] ", results->maxElevation - (r * units->height));
 
     for (int c = 0; c < cols; c++) {
       printf("%c", matrix[r][c]);
     } // for c
   } // for r
+
+  
+  printf("\n");
+  for (int i = 0; i < xOffset; i++) printf(" ");
+
+  // stampa barre per unità di distanza
+  for (int c = 0; c < xMax; c++) {
+
+    if (c % printXLabelEvery == 0) {
+      printf("|");
+    } else {
+      printf(" ");
+    }
+   
+  }
+  
+  printf("\n");
+  for (int i = 0; i < xOffset; i++) printf(" ");
+
+  // stampa distanze progressive
+  for (int c = 0; c < xMax; c++) {
+
+    if (c % printXLabelEvery == 0) {
+      xlabel = (double)c * units->distance / 1000.0;
+      printf("%-*.*lf", printXLabelEvery, 1, xlabel);
+    } 
+   
+  }
+
   printf("\n");
 }
