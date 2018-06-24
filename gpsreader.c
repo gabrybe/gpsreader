@@ -115,7 +115,7 @@ struct tm seconds2tm(const double *timeInSeconds);
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
 double getAscent(const gpxPoint *p1, const gpxPoint *p2);
 double getDistance(double lat1, double lon1, double lat2, double lon2);
-double getAvgSpeed(double *distance, double *timeInSeconds);
+double getAvgSpeed(double distance, double timeInSeconds);
 void getAvgElevation(const gpxPoint *pointSet, int size, const altigraphUnits *units, double *avgElevation, int avgElevationSize);
 
 void getTrackName(const xmlDocPtr doc, const xmlNodePtr node, char *trackName);
@@ -278,7 +278,7 @@ void getResults(gpxPoint *pointSet, int size, metrics *r) {
   } // for p
 
   // Calcolo della velocità media
-  r->avgspeed = getAvgSpeed(&(r->distance), &(r->totalTime));
+  r->avgspeed = getAvgSpeed(r->distance, r->totalTime);
 }
 
 // dato un array di punti traccia, e un'unità di distanza calcola la quota media per ciascuna unità
@@ -462,8 +462,8 @@ struct tm seconds2tm(const double *timeInSeconds) {
 }
 
 // calcola la velocità media in Km/h data una distanza in Km ed un tempo in secondi
-double getAvgSpeed(double *distance, double *timeInSeconds) {
-  return ((*distance / *timeInSeconds) * 3.6);
+double getAvgSpeed(double distance, double timeInSeconds) {
+  return ((distance / timeInSeconds) * 3.6);
 }
 
 // stampa una struct gpxPoint
