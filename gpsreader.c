@@ -380,7 +380,10 @@ void getTrackName(const xmlDocPtr doc, const xmlNodePtr node, char *trackName) {
   xmlXPathContextPtr trackContext = createXPathContext(doc, node);
   xmlXPathObjectPtr name = xmlXPathEvalExpression((xmlChar*)"//gpx:name/text()", trackContext);
   
-  strcpy(trackName, name->nodesetval->nodeTab[0]->content);
+  strcpy(trackName, "Senza nome");
+  if (name->nodesetval) {
+    strcpy(trackName, name->nodesetval->nodeTab[0]->content);
+  }
 
   xmlXPathFreeObject(name);
   xmlXPathFreeContext(trackContext);
