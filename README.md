@@ -6,7 +6,6 @@ MIT License - gabriele.bernuzzi@studenti.unimi.it
 - il dislivello in salita e discesa accumulato
 - la velocità media
 - le quote altimetriche massime e minime raggiunte
-- ...
 
 Punti chiave dello sviluppo:
 
