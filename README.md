@@ -8,7 +8,7 @@ MIT License - gabriele.bernuzzi@studenti.unimi.it
 - le quote altimetriche massime e minime raggiunte
 - ...
 
-Alcuni punti chiave dello sviluppo:
+Punti chiave dello sviluppo:
 
 - lettura del file XML (in formato GPX, che è uno standard utilizzato da quasi tutti i dispositivi GPS in commercio)
 contenente la traccia del percorso: tramite la libreria libxml2, http://www.xmlsoft.org/
