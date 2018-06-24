@@ -19,18 +19,18 @@ Disegna inoltre un grafico altimetrico della traccia utilizzando i caratteri ASC
 
 ## Algoritmo
 
-Dopo i necessari controlli di esistenza del file GPX, si inizia l'elaborazione del file (`processFile()`) avvalendosi delle funzioni della libreria `libxml2`.  
+Dopo i necessari controlli di esistenza del file GPX, si inizia l'elaborazione del file (funzione `processFile()`, r. 150) avvalendosi delle funzioni della libreria `libxml2`.  
 
-Si estraggono dai nodi del file le informazioni di ogni singolo punto della traccia (`getPointData()`), e si trasferiscono per comodità di elaborazione in un array di struct (`allPoints`, r. 205).
+Si estraggono dai nodi del file le informazioni di ogni singolo punto della traccia (`getPointData()`, r. 390), e si trasferiscono per comodità di elaborazione in un array di struct (`allPoints`, r. 205).
 
-La funzione `getResults()` elabora questo array per fornire le metriche riassuntive della traccia. 
-Di seguito alcuni punti significativi
+La funzione `getResults()` (r. 208) elabora questo array per fornire le metriche riassuntive della traccia.  
+Di seguito alcuni punti significativi dell'elaborazione.  
 
 ### `getAscent()`: calcolo del dislivello 
 Il dislivello tra due punti consecutivi è calcolato come differenza tra le chiavi `elevation` di ciascuno (r. 430)
 
 ### `getDistance()`: calcolo della distanza fra due coordinate
-Si applica la formula che calcola la distanza fra due punti disposti su un arco di circonferenza, più precisa rispetto al calcolo lineare (r. 443,444)
+Si applica la formula che calcola la distanza fra due punti disposti su un arco di circonferenza, più precisa rispetto al calcolo lineare (r. 443, 444)
 
 
 La velocità media è calcolata come la distanza totale diviso il tempo impiegato.
@@ -43,7 +43,7 @@ La funzione stampa, con alcune formattazioni, i dati presenti nella struct `resu
 
 L'idea alla base è quella di utilizzare una matrice n x m, in cui ogni colonna rappresenta una frazione della distanza della traccia, ed ogni riga una frazione della quota massima raggiunta.
 
-In base alla dimensione della matrice (che può essere passata tra i parametri di esecuzione del programma) si determinano i valori di tali frazioni (r. 511,513), e per ogni intervallo di distanza si calcola la sua quota media (funzione `getAvgElevation()`, r. 518).
+In base alla dimensione della matrice (che può essere passata tra i parametri di esecuzione del programma) si determinano i valori di tali frazioni (r. 511, 513), e per ogni intervallo di distanza si calcola la sua quota media (funzione `getAvgElevation()`, r. 518).
 
 Si riempie quindi la matrice inserendo nelle sue righe il numero di caratteri di riempimento che caratterizzano la quota media di ogni unità di distanza (funzione `fillAltiGraphMatrix()`, r. 526).
 
