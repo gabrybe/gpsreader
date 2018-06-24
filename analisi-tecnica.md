@@ -12,10 +12,27 @@ Disegna inoltre un grafico altimetrico della traccia utilizzando i caratteri ASC
 
 ## Parametri in ingresso
 
-`[file]` nome del file GPX da elaborare  
-`[width]` larghezza (in caratteri) del grafico altimetrico  
-`[height]` altezza (in caratteri) del grafico altimetrico  
-`[debug]` 0 = debug disattivo; 1 = debug attivo  
+I parametri sono rappresentati nell'ordine richiesto dal programma
+
+* `[file]` nome del file GPX da elaborare, obbligatorio
+* `[width]` larghezza (in caratteri) del grafico altimetrico; default: 100
+* `[height]` altezza (in caratteri) del grafico altimetrico; default: 30
+* `[debug]` 0 = debug disattivo; 1 = debug attivo; default: 0
+
+## Compilazione
+
+`gcc gpsreader.c -o gpsreader.out -I/usr/include/libxml2 -lxml2 -lm`
+
+*Nota*: La libreria `libxml2` deve essere installata sul sistema; se non presente, installarla tramite `sudo apt-get install libxml2` o il proprio gestore di pacchetti.
+Lo sviluppo ed il collaudo sono avvenuti su Ubuntu v18.04 LTE.
+
+## Esempio di chiamata
+
+`./gpsreader.out samples/trailrunning.gpx 60 40 1`
+
+Elaborerà il file `samples/trailrunning.gpx`, producendo un grafico di 60 colonne x 40 righe, ed attivando la modalità di debug.  
+
+*Nota*: Nella cartella `samples/` sono contenute alcune tracce GPX di prova con cui è possibile collaudare il programma.
 
 ## Algoritmo
 
@@ -49,7 +66,9 @@ Si riempie quindi la matrice inserendo nelle sue righe il numero di caratteri di
 
 Il disegno finale del grafico, completo di etichette di quota (asse y) e distanza (asse x) è svolto dalla funzione `printAltiGraphMatrix()` (r. 551).
 
-## Spunti di intervento per le prossime versioni
+## Prossime versioni
+
+Di seguito alcuni spunti di intervento per il miglioramento delle funzionalità esistenti, e l'arricchimento con nuove features.
 
 * Gestione di metriche aggiuntive e device dependent: frequenza cardiaca, potenza espressa, temperatura
 * Generalizzazione delle funzioni di generazione e stampa della matrice del grafico altimetrico, per poter essere usate anche per stampare il grafico (ad es.) della frequenza cardiaca, della potenza espressa o della temperatura
