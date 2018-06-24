@@ -12,10 +12,10 @@ Disegna inoltre un grafico altimetrico della traccia utilizzando i caratteri ASC
 
 ## Parametri in ingresso
 
-`[file]` nome del file GPX da elaborare
-`[width]` larghezza (in caratteri) del grafico altimetrico
-`[height]` altezza (in caratteri) del grafico altimetrico
-`[debug]` 0 = debug disattivo; 1 = debug attivo
+`[file]` nome del file GPX da elaborare  
+`[width]` larghezza (in caratteri) del grafico altimetrico  
+`[height]` altezza (in caratteri) del grafico altimetrico  
+`[debug]` 0 = debug disattivo; 1 = debug attivo  
 
 ## Algoritmo
 
