@@ -49,11 +49,13 @@ Si riempie quindi la matrice inserendo nelle sue righe il numero di caratteri di
 
 Il disegno finale del grafico, completo di etichette di quota (asse y) e distanza (asse x) è svolto dalla funzione `printAltiGraphMatrix()` (r. 551).
 
-## Spunti di intervento per le prossime versioni  
+## Spunti di intervento per le prossime versioni
 
 * Gestione di metriche aggiuntive e device dependent: frequenza cardiaca, potenza espressa, temperatura
+* Generalizzazione delle funzioni di generazione e stampa della matrice del grafico altimetrico, per poter essere usate anche per stampare il grafico (ad es.) della frequenza cardiaca, della potenza espressa o della temperatura
+* Spostamento delle funzioni di stampa della matrice in una libreria separata
 * Validazione più approfondita: gestione dell'assenza di dati validi in un punto
-* Disegno del grafico altimetrico tramite libreria grafica e salvataggio dell'immagine in formato grafico PNG
+* Disegno del grafico altimetrico tramite libreria grafica e salvataggio dell'immagine in formato PNG
 
 
 
