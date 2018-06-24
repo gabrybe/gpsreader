@@ -6,9 +6,8 @@
 // - il dislivello in salita e discesa accumulato
 // - la velocità media
 // - le quote altimetriche massime e minime raggiunte
-// - ...
 //
-// Alcuni punti chiave dello sviluppo:
+// Punti chiave dello sviluppo:
 //
 // - lettura del file XML (in formato GPX, che è uno standard utilizzato da quasi tutti i dispositivi GPS in commercio)
 // contenente la traccia del percorso: tramite la libreria libxml2, http://www.xmlsoft.org/
@@ -163,7 +162,7 @@ int processFile(const char *filename) {
   // namespace per identificare il contenuto come aderente al formato GPX
   xmlXPathRegisterNs(docContext, (xmlChar*)"gpx", (xmlChar*) GPX_NAMESPACE_STR);
 
-  // Ricerca dei segmenti della traccia: sono nel nodo /gpx/trk/trkseg (posso avere piu' trk in un file)
+  // Ricerca dei segmenti della traccia: sono nel nodo /gpx/trk/trkseg
   xmlXPathObjectPtr trackSegments = getTrackSegments(docContext);
   if(trackSegments == NULL || xmlXPathNodeSetIsEmpty(trackSegments->nodesetval)){
     printf("Non ho trovato tracce nel file \"%s\"\n", filename);
@@ -323,18 +322,14 @@ void getAvgElevation(const gpxPoint *pointSet, int numPoints, const altigraphUni
 
     if (calcAvg) {
       
-      if (_DEBUG_) {
-        printf("Punto: %d, Distanza: %lf, Unita di distanza %d, quota media %lf; ", p, distance, i, elevation/pc);
-      }
+      if (_DEBUG_) { printf("Punto: %d, Distanza: %lf, Unita di distanza %d, quota media %lf; ", p, distance, i, elevation/pc); }
 
       avgElevation[i++] = elevation / (double)pc;
       
       // reset contando anche eventuali "sforamenti" rispetto all'unità di distanza
       distance -= units->distance;
 
-      if (_DEBUG_) {
-        printf("Scarto accumulato %lf\n\n ", distance);
-      }
+      if (_DEBUG_) { printf("Scarto accumulato %lf\n\n ", distance); }
 
       // reset contatori
       pc = 0;
@@ -346,9 +341,7 @@ void getAvgElevation(const gpxPoint *pointSet, int numPoints, const altigraphUni
   } // for p
   
   // stampo l'array avgElevation
-  if (_DEBUG_) {
-    for (int j = 0; j < avgElevationSize; j++) { printf("\navgElevation[%d]: %lf", j, avgElevation[j]); }
-  }
+  if (_DEBUG_) { for (int j = 0; j < avgElevationSize; j++) { printf("\navgElevation[%d]: %lf", j, avgElevation[j]); } }
 
 }
 
@@ -534,6 +527,7 @@ void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], const alti
   
   int numFillChars[cols];
 
+  // calcolo di quanti caratteri di riempimento per ciascuna colonna (dipendono dalla quota media); si arrotonda all'intero superiore
   for (int i = 0; i < cols; i++) {
     numFillChars[i] = ceil((avgElevation[i] - minElevation) / units->height);    
   }

@@ -16,6 +16,10 @@ contenente la traccia del percorso: tramite la libreria libxml2, http://www.xmls
 - Calcolo distanze tra ogni singolo punto (latitudine/longitudine) della traccia: applicando la formula dell'emisenoverso 
 (https://it.wikipedia.org/wiki/Formula_dell%27emisenoverso)
 
+- Operazioni su date/ore
+
+- Disegno di un grafico altimetrico (in ASCII) con dimensioni personalizzabili
+
 Uso: gpsreader [file] [width] [height] [debug]
      
      [file] nome del file GPX da elaborare
