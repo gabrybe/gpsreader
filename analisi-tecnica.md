@@ -54,6 +54,7 @@ Il disegno finale del grafico, completo di etichette di quota (asse y) e distanz
 * Gestione di metriche aggiuntive e device dependent: frequenza cardiaca, potenza espressa, temperatura
 * Generalizzazione delle funzioni di generazione e stampa della matrice del grafico altimetrico, per poter essere usate anche per stampare il grafico (ad es.) della frequenza cardiaca, della potenza espressa o della temperatura
 * Spostamento delle funzioni di stampa della matrice in una libreria separata
+* Miglioramento dell'interfaccia dei parametri in ingresso usando named parameters (es. -rows=20 -cols=100 ...)
 * Validazione più approfondita: gestione dell'assenza di dati validi in un punto
 * Disegno del grafico altimetrico tramite libreria grafica e salvataggio dell'immagine in formato PNG
 
