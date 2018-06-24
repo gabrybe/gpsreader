@@ -1,23 +1,30 @@
-# gpsreader
-C Course Project - reads a GPX file and extracts the following metrics:
+GPSReader: legge un file GPX e ne estrae alcune metriche
+MIT License - gabriele.bernuzzi@studenti.unimi.it
 
-* Distance
-* Time
-* Average speed
-* Elevation
-* Max/min height
+- la distanza totale percorsa
+- il tempo impiegato
+- il dislivello in salita e discesa accumulato
+- la velocità media
+- le quote altimetriche massime e minime raggiunte
+- ...
 
-## How to compile:
+Alcuni punti chiave dello sviluppo:
 
-gcc /usr/src/gpsreader/gpsreader.c -o /usr/src/gpsreader/gpsreader.out -Iusr/include/libxml2 -lxml2 -lm
+- lettura del file XML (in formato GPX, che è uno standard utilizzato da quasi tutti i dispositivi GPS in commercio)
+contenente la traccia del percorso: tramite la libreria libxml2, http://www.xmlsoft.org/
 
--I: posizione degli header files di libxml2
--lxml2: specifica di cercare il file libxml2.a nella cartella standard delle librerie
--lm: specifica di caricare anche la libreria libm.a per le funzioni matematiche
+- Calcolo distanze tra ogni singolo punto (latitudine/longitudine) della traccia: applicando la formula dell'emisenoverso 
+(https://it.wikipedia.org/wiki/Formula_dell%27emisenoverso)
 
-Run:
+Uso: gpsreader [file] [width] [height] [debug]
+     
+     [file] nome del file GPX da elaborare
+     [width] larghezza (in caratteri) del grafico altimetrico
+     [height] altezza (in caratteri) del grafico altimetrico
+     [debug] 0 = debug disattivo; 1 = debug attivo
 
-/usr/src/gpsreader.out [nomefile GPX]
+Compilazione:
+gcc gpsreader.c -o gpsreader.out -I/usr/include/libxml2 -lxml2 -lm
 
-oppure da /usr/src: ./gpsreader.out [nomefile GPX]
-
+Run di esempio:
+clear && ./gpsreader.out samples/trailrunning.gpx 60 40

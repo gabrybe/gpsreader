@@ -16,9 +16,18 @@
 // - Calcolo distanze tra ogni singolo punto (latitudine/longitudine) della traccia: applicando la formula dell'emisenoverso 
 // (https://it.wikipedia.org/wiki/Formula_dell%27emisenoverso)
 //
-// Uso: gpsreader [file]
+// Uso: gpsreader [file] [width] [height] [debug]
+//      
+//      [file] nome del file GPX da elaborare
+//      [width] larghezza (in caratteri) del grafico altimetrico
+//      [height] altezza (in caratteri) del grafico altimetrico
+//      [debug] 0 = debug disattivo; 1 = debug attivo
+//
 // Compilazione:
 // gcc gpsreader.c -o gpsreader.out -I/usr/include/libxml2 -lxml2 -lm
+//
+// Run di esempio:
+// clear && ./gpsreader.out samples/trailrunning.gpx 60 40
 //
 
 #include <stdio.h>
@@ -47,6 +56,11 @@
 // carattere usato per rappresentare il grafico altimetrico
 #define ALTIGRAPH_FILL_CHAR '*'
 
+// dimensioni di default della matrice usata per il grafico altimetrico
+#define DEFAULT_ALTIGRAPH_ROWS 30
+#define DEFAULT_ALTIGRAPH_COLS 100
+
+
 // tipi custom: Risultati finali
 typedef struct {
   char name[50];
@@ -73,9 +87,18 @@ typedef struct {
   double distance;
 } altigraphUnits;
 
+// dimensioni del grafico altimetrico
+typedef struct {
+  int rows;
+  int cols;
+} altigraphSize;
+
 
 // global variable per attivare la modalità di debugging
 int _DEBUG_ = 0;
+
+// global variable con le dimensioni della matrice
+altigraphSize _ALTIGRAPH_SIZE_;
 
 // prototipi delle funzioni
 int fileExists(const char *filename);
@@ -84,9 +107,10 @@ int processFile(const char *filename);
 void getResults(gpxPoint *pointSet, int size, metrics *r);
 void printResults(const char *filename, const metrics *r);
 void printPoint(const gpxPoint *p, int pointNumber);
-void printAsciiAltiGraph(const metrics *r, const gpxPoint *pointSet, int numPoints);
+void printAltiGraph(const metrics *r, const gpxPoint *pointSet, int numPoints);
 void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], const altigraphUnits *units, const double *avgElevation, int minElevation);
 void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *results, const altigraphUnits *units);
+
 struct tm seconds2tm(const double *timeInSeconds);
 
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
@@ -106,13 +130,15 @@ int main(int argc, char *argv[]) {
   const char *filename = argv[1];
   
   // per attivare il debug
-  _DEBUG_ = ((argc > 2) ? atoi(argv[2]) : 0);
+  _DEBUG_ = ((argc > 4) ? atoi(argv[4]) : 0);
+  _ALTIGRAPH_SIZE_.rows = ((argc > 3) ? abs(atoi(argv[3])) : DEFAULT_ALTIGRAPH_ROWS);
+  _ALTIGRAPH_SIZE_.cols = ((argc > 2) ? abs(atoi(argv[2])) : DEFAULT_ALTIGRAPH_COLS);
 
-  printf("C GPS Reader - v1.0\n");
+  printf("\n[ C GPS Reader v1.0 - by gabriele.bernuzzi@studenti.unimi.it ]\n");
 
   // validazione argomenti
   if (argc < 2 || !fileExists(filename)) {
-    printf("Uso:\n\tgpsreader [file]\n\n\t[file]\n\tpercorso completo del file GPX da esaminare.\n");
+    printf("Uso: gpsreader [file] [width] [height] [debug]\n\t\n\t\n[file]\n  nome del file GPX da elaborare\n\t\n[width]\n  larghezza (in caratteri) del grafico altimetrico\n\t\n[height]\n  altezza (in caratteri) del grafico altimetrico\n\t\n[debug]\n  0 = debug disattivo; 1 = debug attivo\n\n");
     return 1;
   }
 
@@ -190,7 +216,7 @@ int processFile(const char *filename) {
     printResults(filename, &results);
 
     // stampa grafico altimetrico
-    printAsciiAltiGraph(&results, allPoints, numPoints);
+    printAltiGraph(&results, allPoints, numPoints);
   
     free(allPoints);
   } // for n
@@ -460,10 +486,9 @@ void printResults(const char *filename, const metrics *r) {
 
   // si fa qui solo per esigenze di formattazione (in result infatti ci sono solo dati "grezzi", non formattati)
   struct tm totalTime = seconds2tm(&(r->totalTime));
-  
-  printf("\nRisultati elaborazione file: <%s>\n\n", filename);
+  printf("[ Elaborazione file <%s> ]\n\n", filename);
 
-  printf("* Nome traccia: <%s>\n\n", r->name);
+  printf("[ Traccia <%s> ]\n\n", r->name);
   printf("* Distanza (Km):\t\t%8.2lf\n", r->distance / 1000.0);
   printf("* Tempo impiegato (h:m:s):\t%02d:%02d:%02d\n", totalTime.tm_hour, totalTime.tm_min, totalTime.tm_sec);
   printf("* Velocità media (Km/h):\t%8.2lf\n\n", r->avgspeed);
@@ -478,13 +503,13 @@ void printResults(const char *filename, const metrics *r) {
 // grafico altimetrico ascii usando una matrice con caratteri di riempimento
 // l'idea è per ogni "unità di distanza" calcolare l'altezza media, 
 // e riempire tanti quadretti in altezza quante sono le "unità di altezza" dell'altezza media
-void printAsciiAltiGraph(const metrics *r, const gpxPoint *pointSet, int numPoints) {
+void printAltiGraph(const metrics *r, const gpxPoint *pointSet, int numPoints) {
   
   // dimensioni della matrice
-  int cols = 100;
-  int rows = 25;
+  int cols = _ALTIGRAPH_SIZE_.cols;
+  int rows = _ALTIGRAPH_SIZE_.rows;
 
-  // matrice 40r * 80c
+  // matrice r * c
   char matrix[rows][cols];
 
   altigraphUnits units;
@@ -525,55 +550,57 @@ void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], const alti
 
 }
 
-// stampa il profilo altimetrico della traccia
+// stampa il grafico altimetrico della traccia
 void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *results, const altigraphUnits *units) {
-  printf("\nGrafico altimetrico\n");
-  double xlabel = 0.0;
+      
+  // specifica ogni quante colonne stampare il valore della distanza progressiva
+  int xLabelSpacing = 5;
   
-  // specifica ogni quante unità di distanza stampare il valore della distanza progressiva
-  int printXLabelEvery = 5;
-  // allineamento con la prima colonna di dati effettivi: il + 3 è per contenere le due quadre tra cui è racchiusa l'altezza, e lo spazio che stacca le etichette delle altezze dalla prima colonna
-  int xOffset = printXLabelEvery + 3;
+  // quanti caratteri occupa (al massimo) un'etichetta dell'asse y (le quote) ? 4 per i numeri + le quadre che li contengono + lo spazio che stacca le etichette delle altezze dalla prima colonna
+  int yLabelLength = 7;
 
-  int xMax = (cols + printXLabelEvery - (cols % printXLabelEvery));
+  // qual è la posizione dell'inizio dell'ultima etichetta di distanza?
+  int xMax = (cols + xLabelSpacing - (cols % xLabelSpacing));
 
+  // stringa di comodo (contiene [yLabelLength] spazi, utile per gli allineamenti nella stampa delle etichette dei valori dell'asse x )
+  char line[yLabelLength]; 
+  for (int i = 0; i < yLabelLength; i++) line[i] = ' ';
+
+  // stampa titoli e grafico
+  printf("[ Grafico altimetrico %d x %d]\n\n", _ALTIGRAPH_SIZE_.cols, _ALTIGRAPH_SIZE_.rows);
+  printf("Altezza (m)\n");
+
+  // stampa dati per riga (etichette + valori)
   for (int r = 0; r < rows; r++) {
 
     // per ogni riga si stampa l'altitudine
-    printf("\n[%5.0lf] ", results->maxElevation - (r * units->height));
+    printf("\n[%4.0lf] ", results->maxElevation - (r * units->height));
 
     for (int c = 0; c < cols; c++) {
       printf("%c", matrix[r][c]);
     } // for c
   } // for r
 
+  printf("\n%s", line);
   
-  printf("\n");
-  for (int i = 0; i < xOffset; i++) printf(" ");
-
   // stampa barre per unità di distanza
   for (int c = 0; c < xMax; c++) {
-
-    if (c % printXLabelEvery == 0) {
-      printf("|");
-    } else {
-      printf(" ");
-    }
-   
+    printf((c % xLabelSpacing == 0) ? "|" : " ");
   }
   
-  printf("\n");
-  for (int i = 0; i < xOffset; i++) printf(" ");
+  printf("\n%s", line);
 
   // stampa distanze progressive
+  double xlabel = 0.0;
   for (int c = 0; c < xMax; c++) {
 
-    if (c % printXLabelEvery == 0) {
+    if (c % xLabelSpacing == 0) {      
       xlabel = (double)c * units->distance / 1000.0;
-      printf("%-*.*lf", printXLabelEvery, 1, xlabel);
+      // printf con %-*.*: il "-" allinea a sinistra; gli *.* permettono di specificare tramite variabili la lunghezza massima e il numero di decimali
+      printf("%-*.*lf", xLabelSpacing, 1, xlabel);
     } 
    
   }
-
-  printf("\n");
+  // stampa legenda asse x
+  printf("\t Distanza (Km)\n");
 }
