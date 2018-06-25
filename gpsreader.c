@@ -110,7 +110,7 @@ void printAltiGraph(const metrics *r, const gpxPoint *pointSet, int numPoints);
 void fillAltiGraphMatrix(int rows, int cols, char matrix[rows][cols], const altigraphUnits *units, const double *avgElevation, int minElevation);
 void printAltiGraphMatrix(int rows, int cols, const char matrix[rows][cols], const metrics *results, const altigraphUnits *units);
 
-struct tm seconds2tm(const double *timeInSeconds);
+struct tm seconds2tm(double timeInSeconds);
 
 gpxPoint getPointData(const xmlDocPtr doc, const xmlNodePtr pointNode);
 double getAscent(const gpxPoint *p1, const gpxPoint *p2);
@@ -450,10 +450,10 @@ double getDistance(double lat1, double lon1, double lat2, double lon2) {
 }
 
 // crea una struct tm a partire da un numero di secondi
-struct tm seconds2tm(const double *timeInSeconds) {
-  unsigned int hours = (int) (*timeInSeconds / 3600.0);
-  int minutes = (int) ((*timeInSeconds - (3600 * hours)) / 60.0);
-  int seconds = (int) (*timeInSeconds - (3600 * hours) - (60 * minutes));
+struct tm seconds2tm(double timeInSeconds) {
+  unsigned int hours = (int) (timeInSeconds / 3600.0);
+  int minutes = (int) ((timeInSeconds - (3600 * hours)) / 60.0);
+  int seconds = (int) (timeInSeconds - (3600 * hours) - (60 * minutes));
 
   struct tm result = {0};
 
@@ -481,7 +481,7 @@ void printPoint(const gpxPoint *p, int pointNumber) {
 void printResults(const char *filename, const metrics *r) {
 
   // si fa qui solo per esigenze di formattazione (in result infatti ci sono solo dati "grezzi", non formattati)
-  struct tm totalTime = seconds2tm(&(r->totalTime));
+  struct tm totalTime = seconds2tm((r->totalTime));
   printf("[ Elaborazione file <%s> ]\n\n", filename);
 
   printf("[ Traccia <%s> ]\n\n", r->name);
