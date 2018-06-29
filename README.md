@@ -26,8 +26,8 @@ Uso: gpsreader [file] [width] [height] [debug]
      [height] altezza (in caratteri) del grafico altimetrico
      [debug] 0 = debug disattivo; 1 = debug attivo
 
-Compilazione:
-gcc gpsreader.c -o gpsreader.out -I/usr/include/libxml2 -lxml2 -lm
+Analisi tecnica nel file `analisi-tecnica.md`.
 
-Run di esempio:
-clear && ./gpsreader.out samples/trailrunning.gpx 60 40
+Quick run con dati di esempio:
+
+`clear && ./gpsreader.out samples/trailrunning.gpx 60 40`
