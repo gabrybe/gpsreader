@@ -21,7 +21,8 @@ I parametri sono rappresentati nell'ordine richiesto dal programma
 
 ## Compilazione
 
-Lo sviluppo ed il collaudo sono avvenuti su Ubuntu v18.04 LTE.  
+Lo sviluppo ed il collaudo sono avvenuti su Ubuntu Linux v18.04 LTE; non vengono comunque utilizzati parametri o direttive specifiche della distribuzione.  
+Compilare con il comando
 
 `gcc gpsreader.c -o gpsreader.out -I/usr/include/libxml2 -lxml2 -lm`
 
