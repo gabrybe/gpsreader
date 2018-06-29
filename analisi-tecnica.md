@@ -21,10 +21,12 @@ I parametri sono rappresentati nell'ordine richiesto dal programma
 
 ## Compilazione
 
+Lo sviluppo ed il collaudo sono avvenuti su Ubuntu v18.04 LTE.  
+
 `gcc gpsreader.c -o gpsreader.out -I/usr/include/libxml2 -lxml2 -lm`
 
 *Nota*: La libreria `libxml2` deve essere installata sul sistema; se non presente, installarla tramite `sudo apt-get install libxml2` o il proprio gestore di pacchetti.
-Lo sviluppo ed il collaudo sono avvenuti su Ubuntu v18.04 LTE.
+
 
 ## Esempio di chiamata
 
