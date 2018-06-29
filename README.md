@@ -1,6 +1,6 @@
 ## GPSReader
 
-Legge un file GPX, ne estrae alcune metriche e disegna un grafico altimetrico in ASCII
+Legge un file GPX, ne estrae alcune metriche e disegna un grafico altimetrico in ASCII.  
 
 Le metriche estratte sono:
 
@@ -14,7 +14,9 @@ Le metriche estratte sono:
 ## Uso
 
 `gpsreader [file] [width] [height] [debug]`
-     
+ 
+ Significato dei parametri:  
+ 
      [file] nome del file GPX da elaborare
      [width] larghezza (in caratteri) del grafico altimetrico
      [height] altezza (in caratteri) del grafico altimetrico
